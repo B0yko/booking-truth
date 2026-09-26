@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from booking_truth import __version__
+from booking_truth.harness.cli_test import register as register_test_commands
 from booking_truth.harness.scenarios_cli import app as scenarios_app
 from booking_truth.sandbox.cli import app as sandbox_app
 from booking_truth.trace.validate import iter_jsonl, trace_errors
@@ -22,6 +23,7 @@ app = typer.Typer(
 
 app.add_typer(sandbox_app, name="sandbox", help="Run the sandbox calendar and CRM service.")
 app.add_typer(scenarios_app, name="scenarios", help="List and lint scenario suites.")
+register_test_commands(app)
 
 
 def _version_callback(value: bool) -> None:

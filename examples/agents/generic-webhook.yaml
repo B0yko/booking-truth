@@ -1,0 +1,29 @@
+# agent.yaml for an agent behind a webhook, for example an n8n workflow
+# "Webhook -> your agent -> Respond to Webhook".
+#
+#   export AGENT_WEBHOOK_TOKEN=...   # whatever your webhook checks, if anything
+#   booking-truth test --agent-config examples/agents/generic-webhook.yaml --sandbox http://localhost:8100
+#
+# The agent must use the sandbox as its Cal.com or Google Calendar base URL, pass the wiring preflight,
+# and put the lead's email on every booking it makes.
+url: http://localhost:5678/webhook/booking-agent
+headers:
+  Authorization: "Bearer ${AGENT_WEBHOOK_TOKEN:-dev-local-key}"
+# Variables: session_id, message_id, message, channel, lead.email, lead.name, lead.timezone_hint and
+# history (the conversation so far, as a list of {role, content}). A string that is exactly one
+# placeholder keeps the variable's JSON type (null, list); inside text it is inserted as text.
+body:
+  sessionId: "{{session_id}}"
+  text: "{{message}}"
+  contact:
+    email: "{{lead.email}}"
+    name: "{{lead.name}}"
+    timezone: "{{lead.timezone_hint}}"
+response:
+  # Dot paths with list indexes: data.reply, choices.0.message.content or messages[0].text.
+  reply_path: output
+  version_path: version
+timeout_s: 90
+# session_id | cookie | stateless. Use cookie when the agent keeps its session in a cookie, and
+# stateless (with {{history}} in the body) when it keeps no conversation state at all.
+session_mode: session_id

@@ -1,0 +1,25 @@
+# agent.yaml for the bundled reference agent, driven through the generic HTTP adapter.
+#
+#   booking-truth test --agent-config examples/agents/bundled.yaml --sandbox http://localhost:8100
+#
+# Without --agent-config, an agent URL is already driven with this protocol (plus structured slot
+# picks); this file shows the same request as a template you can adapt to your own agent.
+url: http://localhost:8000/v1/chat
+headers:
+  # ${NAME} reads an environment variable; ${NAME:-default} falls back to the default.
+  Authorization: "Bearer ${BT_API_KEY:-dev-local-key}"
+body:
+  session_id: "{{session_id}}"
+  message_id: "{{message_id}}"
+  channel: "{{channel}}"
+  lead:
+    email: "{{lead.email}}"
+    name: "{{lead.name}}"
+    timezone_hint: "{{lead.timezone_hint}}"
+  message: "{{message}}"
+response:
+  reply_path: reply
+  version_path: agent_version
+timeout_s: 60
+# session_id: the agent keeps state per session_id (sent in the body above).
+session_mode: session_id
