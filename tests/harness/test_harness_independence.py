@@ -18,6 +18,11 @@ PACKAGE = "booking_truth.harness"
 FORBIDDEN = "booking_truth.agent.guards"
 #: Pure-logic modules that must not depend on the agent package at all.
 AGENT_FREE = ("beliefs", "timeparse", "lexicon_extractor", "grading", "metrics", "redact")
+#: `eval tz` benchmarks the deterministic resolver itself (`booking_truth.agent.guards.tz.resolver`), so it
+#: is the one place the harness legitimately imports a guard: it evaluates that guard, rather than reusing
+#: it to grade a trial (the circularity ADR 0008 guards against). Everything else in `harness/` stays
+#: independent of `agent/guards`.
+INDEPENDENCE_EXEMPT = ("evals/tz_eval.py",)
 
 
 def _module_name(path: Path) -> str:
@@ -68,6 +73,8 @@ def test_harness_package_is_found() -> None:
 
 @pytest.mark.parametrize("path", harness_files(), ids=lambda p: str(p.relative_to(HARNESS)))
 def test_no_harness_module_imports_the_agent_guards(path: Path) -> None:
+    if str(path.relative_to(HARNESS)) in INDEPENDENCE_EXEMPT:
+        pytest.skip("exempt: benchmarks the guard itself, see INDEPENDENCE_EXEMPT")
     current = _module_name(path)
     found = [
         m
