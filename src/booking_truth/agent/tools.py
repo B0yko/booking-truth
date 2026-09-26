@@ -35,6 +35,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 
 from booking_truth.agent import render
+from booking_truth.agent.guards.idempotency import (
+    change_idem_key,
+    create_idem_key,
+    known_write,
+    verify_landed,
+)
 from booking_truth.agent.guards.readback import read_back
 from booking_truth.agent.guards.tz.resolver import get_resolver
 from booking_truth.agent.models import BookingAction, GuardEvent
@@ -58,6 +64,8 @@ if TYPE_CHECKING:
 
 ToolMode = Literal["guarded", "naive"]
 WriteStatus = Literal["trusted", "verified", "unverified"]
+#: Re-does a write's calendar call with the same idempotency key (``idempotency``'s retry after a timeout).
+Dispatch = Callable[[], Awaitable[WriteResult]]
 
 MAX_GUARDED_SLOTS = 12
 MAX_NAIVE_STARTS = 20
@@ -690,10 +698,59 @@ class ToolExecutor:
 
     async def _hook_write_key(
         self, kind: Literal["create", "reschedule", "cancel"], *, start: datetime | None, ref: str | None
-    ) -> str | None:
-        """Hook for ``idempotency``: the key registered as ``pending`` before dispatch and sent with a create
-        (``metadata.bt_idem``). ``None``: no key."""
-        return None
+    ) -> tuple[str | None, WriteOk | None]:
+        """Hook for ``idempotency``: the key registered as ``pending`` before dispatch (sent with a create as
+        ``metadata.bt_idem``).
+
+        A **create** whose key is already ``committed`` or ``adopted`` — the same lead booking the same slot
+        again, with no cancel in between — is not dispatched a second time: the booking it already produced
+        is read back and returned instead, so a repeated ``book_slot`` call (a retried tool call, a scripted
+        misbehaviour) cannot land a genuine duplicate. A reschedule or cancel whose key is already finished
+        is dispatched again regardless: Cal.com itself rejects it as ``duplicate`` (the booking it targeted
+        already moved or is already cancelled), which is the more informative outcome for a deliberate
+        repeat, such as cancelling an already-cancelled booking.
+
+        Any kind whose key is still ``pending`` — an earlier attempt for the same intent may be in flight,
+        elsewhere, or was interrupted before it could finish — is checked the same way as an unknown outcome
+        (:func:`~booking_truth.agent.guards.idempotency.verify_landed`) before this attempt dispatches.
+
+        The second element of the result carries an already-found write; the caller skips its calendar call
+        for it. ``(None, None)``: no key (guard off)."""
+        if not self.on("idempotency"):
+            return None, None
+        store, lead, event_key = self.deps.store, self.ctx.lead_email, self.deps.calendar.event_key
+        if kind == "create":
+            assert start is not None
+            generation = store.generations.current(lead, event_key)
+            key = create_idem_key(lead, event_key, start, generation)
+            record, previous = store.idem.begin(
+                key,
+                kind="create",
+                lead_email=lead,
+                event_key=event_key,
+                slot_start_utc=start,
+                generation=generation,
+            )
+        else:
+            assert ref is not None
+            key = change_idem_key(ref, kind, start)
+            record, previous = store.idem.begin(
+                key, kind=kind, lead_email=lead, event_key=event_key, slot_start_utc=start
+            )
+        if kind == "create" and previous in ("committed", "adopted") and record.booking_ref:
+            found = await known_write(self.deps.calendar, record.booking_ref)
+            if found is not None:
+                self.state.event("idempotency", "replayed", f"{kind} {found.ref}")
+                return key, WriteOk(found)
+        if previous == "pending":
+            landed = await verify_landed(
+                self.deps.calendar, kind, lead_email=lead, key=key, start=start, ref=ref
+            )
+            if landed is not None:
+                store.idem.adopt(key, landed.booking.ref)
+                self.state.event("idempotency", "replayed", f"{kind} {landed.booking.ref}")
+                return key, landed
+        return key, None
 
     async def _hook_after_unknown(
         self,
@@ -703,10 +760,37 @@ class ToolExecutor:
         key: str | None,
         start: datetime | None,
         ref: str | None,
+        dispatch: Dispatch | None = None,
     ) -> WriteResult:
-        """Hook for ``idempotency``: verify before retrying a write whose outcome is unknown (adopt a booking
-        that already landed, or retry once with the same key). Without it the unknown result stands."""
-        return result
+        """Hook for ``idempotency``: on a timeout (never for a malformed or server-error answer, which are
+        not ambiguous about having committed), verify before retrying: adopt a booking that already landed,
+        else retry once with the same key and check again if that retry is itself unknown. Without the guard,
+        or for any other reason, the unknown result stands."""
+        if not self.on("idempotency") or key is None or result.reason != "timeout":
+            return result
+        lead = self.ctx.lead_email
+        current: WriteResult = result
+        reason = result.reason
+        for attempt in range(2):
+            landed = await verify_landed(
+                self.deps.calendar, kind, lead_email=lead, key=key, start=start, ref=ref
+            )
+            if landed is not None:
+                self.deps.store.idem.adopt(key, landed.booking.ref)
+                self.state.event("idempotency", "adopted", f"{kind} {landed.booking.ref}")
+                return landed
+            if attempt == 1 or dispatch is None:
+                break
+            self.state.event("idempotency", "retry", f"{kind}: {reason}")
+            current = await dispatch()
+            if not isinstance(current, WriteUnknown):
+                if not isinstance(current, WriteOk):
+                    self.deps.store.idem.fail(key)
+                return current
+            reason = current.reason
+        self.deps.store.idem.fail(key)
+        self.state.event("idempotency", "gave_up", f"{kind}: {reason}")
+        return current
 
     async def _hook_verify(self, action: BookingAction, result: WriteOk) -> WriteStatus:
         """``claim_ledger``: read the write back (retrying for up to 5 seconds) and record it in the ledger as
@@ -740,10 +824,19 @@ class ToolExecutor:
         if self.on("claim_ledger") and self.deps.store.claims.void(ref):
             self.state.event("claim_ledger", "entry_voided", f"{ref}: {why}")
 
-    async def _hook_after_write(self, record: WriteRecord, *, key: str | None) -> None:
-        """Hook for ``idempotency`` bookkeeping after a successful write (commit the key; bump the lead's
-        generation after a cancel)."""
-        return None
+    async def _hook_after_write(self, record: WriteRecord, *, key: str | None, replay: bool = False) -> None:
+        """Hook for ``idempotency`` bookkeeping after a successful write: commit the key to the booking it
+        produced, unless the row was already finished before this call began (``replay``: the result is a
+        repeat of an earlier write, adopted by :meth:`_hook_write_key` without dispatching); and bump the
+        lead's generation after a cancel that is newly resolved in this call, so a later booking of the same
+        slot gets a fresh key rather than replaying the cancelled one."""
+        if not self.on("idempotency") or key is None or replay:
+            return
+        stored = self.deps.store.idem.get(key)
+        if stored is not None and stored.status == "pending":
+            self.deps.store.idem.commit(key, record.booking.ref)
+        if record.action == "cancelled":
+            self.deps.store.generations.increment(self.ctx.lead_email, self.deps.calendar.event_key)
 
     # Create ----------------------------------------------------------------------------------------------
 
@@ -754,20 +847,27 @@ class ToolExecutor:
         existing = await self._hook_existing_booking()
         if existing is not None:
             return "already_booked", None, existing, ""
-        key = await self._hook_write_key("create", start=start, ref=None)
-        result = await self.deps.calendar.create_booking(
-            start=start,
-            lead_email=self.ctx.lead_email,
-            lead_name=self._lead_name(),
-            lead_zone=self.ctx.zone,
-            idem_key=key,
-        )
+        key, adopted = await self._hook_write_key("create", start=start, ref=None)
+        replay = adopted is not None
+
+        async def dispatch() -> WriteResult:
+            return await self.deps.calendar.create_booking(
+                start=start,
+                lead_email=self.ctx.lead_email,
+                lead_name=self._lead_name(),
+                lead_zone=self.ctx.zone,
+                idem_key=key,
+            )
+
+        result: WriteResult = adopted if adopted is not None else await dispatch()
         if isinstance(result, WriteUnknown):
-            result = await self._hook_after_unknown("create", result, key=key, start=start, ref=None)
+            result = await self._hook_after_unknown(
+                "create", result, key=key, start=start, ref=None, dispatch=dispatch
+            )
         if isinstance(result, WriteOk):
             status = await self._hook_verify("booked", result)
             record = self._record("booked", result, status)
-            await self._hook_after_write(record, key=key)
+            await self._hook_after_write(record, key=key, replay=replay)
             return ("unconfirmed" if status == "unverified" else "booked"), record, None, ""
         if isinstance(result, WriteRejected):
             return ("slot_taken" if result.reason == "slot_taken" else "rejected"), None, None, result.detail
@@ -834,16 +934,23 @@ class ToolExecutor:
         ``slot_taken``, ``not_found``, ``rejected`` or ``unknown``."""
         if not self._allowed(ref):
             return "not_allowed", None, ""
-        key = await self._hook_write_key("reschedule", start=start, ref=ref)
-        result = await self.deps.calendar.reschedule(
-            ref=ref, new_start=start, idem_key=key, reason="Rescheduled by the prospect"
-        )
+        key, adopted = await self._hook_write_key("reschedule", start=start, ref=ref)
+        replay = adopted is not None
+
+        async def dispatch() -> WriteResult:
+            return await self.deps.calendar.reschedule(
+                ref=ref, new_start=start, idem_key=key, reason="Rescheduled by the prospect"
+            )
+
+        result: WriteResult = adopted if adopted is not None else await dispatch()
         if isinstance(result, WriteUnknown):
-            result = await self._hook_after_unknown("reschedule", result, key=key, start=start, ref=ref)
+            result = await self._hook_after_unknown(
+                "reschedule", result, key=key, start=start, ref=ref, dispatch=dispatch
+            )
         if isinstance(result, WriteOk):
             status = await self._hook_verify("rescheduled", result)
             record = self._record("rescheduled", result, status)
-            await self._hook_after_write(record, key=key)
+            await self._hook_after_write(record, key=key, replay=replay)
             return ("unconfirmed" if status == "unverified" else "rescheduled"), record, ""
         if isinstance(result, WriteRejected):
             if result.reason == "not_found":
@@ -907,16 +1014,22 @@ class ToolExecutor:
         ``already_cancelled``, ``rejected`` or ``unknown``."""
         if not self._allowed(ref):
             return "not_allowed", None, ""
-        key = await self._hook_write_key("cancel", start=None, ref=ref)
-        result = await self.deps.calendar.cancel(
-            ref=ref, reason=reason or "Cancelled by the prospect", idem_key=key
-        )
+        cancel_reason = reason or "Cancelled by the prospect"
+        key, adopted = await self._hook_write_key("cancel", start=None, ref=ref)
+        replay = adopted is not None
+
+        async def dispatch() -> WriteResult:
+            return await self.deps.calendar.cancel(ref=ref, reason=cancel_reason, idem_key=key)
+
+        result: WriteResult = adopted if adopted is not None else await dispatch()
         if isinstance(result, WriteUnknown):
-            result = await self._hook_after_unknown("cancel", result, key=key, start=None, ref=ref)
+            result = await self._hook_after_unknown(
+                "cancel", result, key=key, start=None, ref=ref, dispatch=dispatch
+            )
         if isinstance(result, WriteOk):
             status = await self._hook_verify("cancelled", result)
             record = self._record("cancelled", result, status)
-            await self._hook_after_write(record, key=key)
+            await self._hook_after_write(record, key=key, replay=replay)
             return ("unconfirmed" if status == "unverified" else "cancelled"), record, ""
         if isinstance(result, WriteRejected):
             if result.reason == "not_found":

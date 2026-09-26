@@ -1,0 +1,54 @@
+# Booking create commits on the calendar and then hangs past the client's timeout, the way a real network
+# stall can leave a write's outcome unknown after it actually landed. With the guard the agent looks for the
+# booking it already made instead of blindly retrying, adopts it and confirms normally. Without it the
+# write is reported as failed even though the calendar holds it, so the prospect is told nothing is booked.
+guard: idempotency
+title: A create that commits and then times out is adopted, not repeated or lost
+scenario:
+  id: idempotency-commit-then-timeout
+  title: Book when booking create commits and then times out
+  tags: [fault]
+  faults:
+    - {group: bookings.create, mode: commit_then_timeout, times: 1}
+  persona:
+    given_name: Priya
+    initial: K
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "13:00"
+      end: "17:00"
+    correction: "Could we do an afternoon {{window.dates_text}}, between 1 and 5 pm New York time?"
+    script:
+      - say: "Hi, I'd like to book an intro call in the next few days, afternoons if possible. I'm in New York."
+      - say: "Eastern time, New York."
+        when: agent_asks_timezone
+      - pick: in_window
+      - say: "Yes, please book it."
+        when: agent_asks_confirmation
+      - say: "Thanks."
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - guard_event: {guard: idempotency, event: adopted}
+    - active_bookings: {eq: 1}
+    - reply_matches: "Booked:"
+  assert_not:
+    - reply_matches: "didn't accept that"
+    - guard_event: {guard: claim_ledger, event: unverified}
+expect_off:
+  outcome: unclaimed_booking
+  assert:
+    - active_bookings: {eq: 1}
+    - reply_matches: "that time was just taken by someone else, so nothing is booked yet"
+  assert_not:
+    - guard_event: {guard: idempotency, event: adopted}
