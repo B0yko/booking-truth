@@ -93,6 +93,10 @@ Each trial gets exactly one outcome: the first rule below that matches.
    union of all slot starts returned by the Cal.com slots endpoint in the request log; for Google it is the set of
    free slots computed from each logged `freeBusy` response (only calendar entries without `errors`) plus the seeded
    working hours, event length and minimum notice, inside that query's window. The setup booking's time is exempt.
+   A booking created or moved in this trial that overlaps time held by someone else at the end of the trial (a seeded
+   or third-party block, another attendee's booking) is also `invented_slot`: that time was not available when it was
+   booked. Cal.com rejects such a booking; a Google insert does no conflict checking, so only a client that re-checks
+   free/busy before inserting avoids it.
 6. `wrong_time`: an active booking created or moved in this trial lies outside the persona's hidden window (checked
    in the persona's true zone).
 7. `unclaimed_booking`: an active booking created or moved in this trial exists, but the belief is `not_booked`.
