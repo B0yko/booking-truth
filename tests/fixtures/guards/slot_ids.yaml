@@ -1,0 +1,49 @@
+# The prospect picks an offered Berlin-afternoon slot by name, and the model computes the booking time
+# itself instead of citing a slot id: it takes the slot's Berlin wall-clock reading and rebuilds it as if
+# those same numbers were a host-zone (New York) time, six hours off. With slot ids the model never does
+# this arithmetic — it only ever names a slot_id from the list find_slots returned, so the misbehaviour has
+# nothing to act on and the correct slot is booked. Without slot ids the booking lands at the wrong instant,
+# outside the window the prospect actually asked for.
+guard: slot_ids
+title: A model-computed booking time can only drift off-slot when the model computes it
+misbehaviours: [wrong_iso_offset]
+scenario:
+  id: slot-ids-wrong-offset
+  title: Book from Berlin while the model computes its own (wrong) booking time
+  tags: [happy]
+  persona:
+    given_name: Jonas
+    initial: K
+    style: brief
+    goal: book
+    true_zone: Europe/Berlin
+    timezone_statement: "I'm in Berlin."
+    clarification: "Central European time, I'm in Berlin."
+    window:
+      # 15:00-19:00 in Berlin is 09:00-13:00 in New York for most of the year.
+      dates: {rule: next_business_days, count: 5}
+      start: "15:00"
+      end: "19:00"
+    correction: "Could we find something {{window.dates_text}}, between 3 and 7 pm Berlin time?"
+    script:
+      - say: "Hi, I'm in Berlin and would like to book an intro call, ideally late afternoon my time."
+      # Said as text, so the model books it itself instead of clicking a slot quick reply.
+      - say: "{{offered[0].label}} works for me."
+        when: agent_offered_slots
+      - say: "Thanks!"
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - active_bookings: {eq: 1}
+  assert_not:
+    - guard_event: {guard: slot_ids, event: unknown_or_expired_slot}
+expect_off:
+  outcome: wrong_time
+  assert:
+    - active_bookings: {eq: 1}
+    - reply_matches: "You're booked for"
