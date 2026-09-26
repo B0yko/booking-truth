@@ -51,6 +51,7 @@ packages = ["src/booking_truth"]
 "schemas" = "booking_truth/_data/schemas"
 "pricing.yaml" = "booking_truth/_data/pricing.yaml"
 "widget/widget.js" = "booking_truth/_data/widget/widget.js"
+"widget/demo.html" = "booking_truth/_data/widget/demo.html"
 
 [dependency-groups]
 dev = [

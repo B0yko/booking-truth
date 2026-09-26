@@ -66,36 +66,18 @@ def _validation_detail(exc: ValidationError | RequestValidationError) -> str:
     return "; ".join(parts)
 
 
-def demo_page(*, offline: bool) -> str:
-    banner = (
-        '<p class="banner" role="status">Offline demo mode: no LLM key is configured, so a scripted policy '
-        "answers. It handles simple booking, reschedule and cancel requests in English.</p>"
-        if offline
-        else ""
-    )
-    return f"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>booking-truth agent demo</title>
-<style>
-body {{ margin: 0; font: 16px/1.5 system-ui, sans-serif; color: #1d2522; background: #fbfaf6; }}
-main {{ max-width: 720px; margin: 0 auto; padding: 32px 16px; }}
-.banner {{ background: #fff4d6; border: 1px solid #e6c56b; border-radius: 8px; padding: 10px 14px; }}
-</style>
-</head>
-<body>
-<main>
-<h1>Book a 30-minute intro call</h1>
-{banner}
-<p>Use the chat button to book, move or cancel a call. Bookings go to the calendar this agent is configured
-with.</p>
-</main>
-<script src="/widget.js" data-agent="/" async></script>
-</body>
-</html>
-"""
+_WIDGET_PLACEHOLDER_PAGE = (
+    "<!doctype html><title>booking-truth demo</title>"
+    "<p>The demo page is not bundled in this installation.</p>"
+)
+
+
+def demo_page() -> str:
+    """The sample landing page served at ``GET /demo`` (``widget/demo.html`` as shipped)."""
+    try:
+        return (data_path("widget") / "demo.html").read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return _WIDGET_PLACEHOLDER_PAGE
 
 
 def create_agent_app(
@@ -283,7 +265,7 @@ def create_agent_app(
 
     @app.get("/demo", response_class=HTMLResponse)
     async def demo() -> HTMLResponse:
-        return HTMLResponse(demo_page(offline=deps.offline))
+        return HTMLResponse(demo_page())
 
     @app.get("/widget.js")
     async def widget_js() -> Response:
@@ -291,6 +273,6 @@ def create_agent_app(
             body = (data_path("widget") / "widget.js").read_text(encoding="utf-8")
         except (FileNotFoundError, OSError):
             body = WIDGET_PLACEHOLDER
-        return Response(body, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+        return Response(body, media_type="text/javascript", headers={"Cache-Control": "no-cache"})
 
     return app

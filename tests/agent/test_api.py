@@ -248,14 +248,22 @@ async def test_health_reports_the_outbox_backlog(guarded: AgentEnv) -> None:
     assert second["handoffs_undelivered"] == 1
 
 
-async def test_the_demo_page_shows_the_offline_banner(guarded: AgentEnv) -> None:
+async def test_the_demo_page_embeds_the_widget(guarded: AgentEnv) -> None:
     page = await guarded.client.get("/demo")
     assert page.status_code == 200
-    assert "Offline demo mode" in page.text
+    assert page.headers["content-type"].startswith("text/html")
     assert '<script src="/widget.js" data-agent="/" async></script>' in page.text
     script = await guarded.client.get("/widget.js")
     assert script.status_code == 200
-    assert script.headers["content-type"].startswith("application/javascript")
+    assert script.headers["content-type"].startswith("text/javascript")
+    assert script.text.startswith("// @ts-check")
+
+
+async def test_the_version_endpoint_flags_offline_mode_for_the_widget_banner(guarded: AgentEnv) -> None:
+    # Every test in this module runs with no LLM key (conftest's autouse `_offline` fixture), so the
+    # bundled FakeLLM answers and the widget's "offline demo mode" banner is driven by this field.
+    data = (await guarded.client.get("/v1/version")).json()
+    assert data["offline"] is True
 
 
 async def test_the_trace_endpoint_needs_the_flag_and_the_bearer(hidden: AgentEnv, guarded: AgentEnv) -> None:
