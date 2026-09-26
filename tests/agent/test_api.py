@@ -346,7 +346,7 @@ def test_google_is_not_available_yet(tmp_path: Path) -> None:
 
 
 class Scripted:
-    """A non-offline model double for the demo banner test."""
+    """A non-offline model double for the version-endpoint offline-flag test."""
 
     async def chat(
         self,
@@ -372,10 +372,12 @@ class Scripted:
         )
 
 
-async def test_a_live_model_shows_no_offline_banner(sandbox: Sandbox, tmp_path: Path) -> None:
+async def test_a_live_model_reports_offline_false(sandbox: Sandbox, tmp_path: Path) -> None:
+    # /demo is the static widget/demo.html; the widget itself hides the offline banner using this flag
+    # (see test_the_version_endpoint_flags_offline_mode_for_the_widget_banner for the scripted-offline case).
     async for env in make_env(sandbox, tmp_path, llm=Scripted()):
         page = await env.client.get("/demo")
-        assert "Offline demo mode" not in page.text
+        assert page.status_code == 200
         version = (await env.client.get("/v1/version")).json()
         assert version["offline"] is False
         assert version["model"] == env.deps.settings.llm_model
