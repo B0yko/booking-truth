@@ -1,0 +1,221 @@
+"""``lead_lock`` in the running agent: a per-lead lease serialises turns across channels, waiting one out
+gets ``409 lead_busy`` instead of running concurrently with it, and the one-active-booking-per-lead policy
+turns a second booking into a reschedule offer, reading the calendar rather than the ledger so a booking
+made outside the agent counts too."""
+
+from __future__ import annotations
+
+import asyncio
+from collections.abc import AsyncIterator
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+
+import pytest
+from agent_env import LEAD, AgentEnv, executor, guarded_slots, make_env, mutable_clock
+from fastapi import FastAPI
+
+import booking_truth.agent.core as core_module
+from booking_truth.agent.core import AgentCore
+from booking_truth.agent.guards import all_except, guards_string
+from booking_truth.agent.tools import ToolExecutor
+from booking_truth.sandbox.state import SandboxState
+from booking_truth.serve import BackgroundServer
+
+Sandbox = tuple[FastAPI, BackgroundServer, SandboxState]
+ASK = "Hi, I'm in New York. Can I book an intro call next week?"
+GREETING = "Hi there, just checking you're still around."
+# Monday 5 October 2026, 10:00 in New York.
+MON_1000 = datetime(2026, 10, 5, 14, 0, tzinfo=UTC)
+WITHOUT = guards_string(all_except("lead_lock"))
+
+
+def core(env: AgentEnv) -> AgentCore:
+    found: AgentCore = env.app.state.core
+    return found
+
+
+def events(tools: ToolExecutor) -> list[tuple[str, str]]:
+    return [(e.guard, e.event) for e in tools.state.events]
+
+
+@pytest.fixture
+async def without(sandbox: Sandbox, tmp_path: Path) -> AsyncIterator[AgentEnv]:
+    async for env in make_env(sandbox, tmp_path, guards=WITHOUT):
+        yield env
+
+
+# The lease itself ------------------------------------------------------------------------------------------
+
+
+async def test_the_lease_is_held_for_the_duration_of_the_context_and_released_after(
+    guarded: AgentEnv,
+) -> None:
+    agent = core(guarded)
+    key = guarded.deps.store.locks.lead_key(LEAD)
+    assert guarded.deps.store.locks.holder(key) is None
+    async with agent._hook_lead_lock(LEAD):
+        holder = guarded.deps.store.locks.holder(key)
+        assert holder is not None
+        assert holder.key == key
+    assert guarded.deps.store.locks.holder(key) is None
+
+
+async def test_a_second_turn_waits_for_the_lease_then_proceeds_in_order(guarded: AgentEnv) -> None:
+    agent = core(guarded)
+    order: list[str] = []
+
+    async def first() -> None:
+        async with agent._hook_lead_lock(LEAD):
+            order.append("first-in")
+            await asyncio.sleep(0.2)
+            order.append("first-out")
+
+    async def second() -> None:
+        await asyncio.sleep(0.05)  # starts after the first has already taken the lease
+        async with agent._hook_lead_lock(LEAD):
+            order.append("second-in")
+
+    await asyncio.gather(first(), second())
+    assert order == ["first-in", "first-out", "second-in"]
+
+
+async def test_the_lease_is_renewed_while_the_turn_still_runs(
+    sandbox: Sandbox, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The clock is fixed in most tests, so a renewed lease's ``expires_at`` would not visibly move; this
+    one uses a clock the test can advance, the way real time would between renewal cycles."""
+    monkeypatch.setattr(core_module, "LEAD_LOCK_RENEW_S", 0.05)
+    clock = mutable_clock()
+    async for env in make_env(sandbox, tmp_path, guards="all", clock=clock):
+        agent = core(env)
+        key = env.deps.store.locks.lead_key(LEAD)
+        async with agent._hook_lead_lock(LEAD):
+            first = env.deps.store.locks.holder(key)
+            assert first is not None
+            clock.advance(timedelta(seconds=5))
+            await asyncio.sleep(0.15)  # a few renewal cycles at the patched interval
+            second = env.deps.store.locks.holder(key)
+            assert second is not None
+            assert second.expires_at > first.expires_at
+        assert env.deps.store.locks.holder(key) is None
+
+
+async def test_lead_busy_returns_409_with_a_short_reply_and_no_turn_runs(
+    guarded: AgentEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def never(key: str, owner: str, **kwargs: object) -> bool:
+        return False
+
+    monkeypatch.setattr(guarded.deps.store.locks, "await_acquire", never)
+    response = await guarded.chat(message=GREETING)
+    assert response.status_code == 409
+    body = response.json()
+    assert body["error"] == "lead_busy"
+    assert body["reply"]
+    # the turn never ran: no history was written for it.
+    assert guarded.deps.store.history.for_session(guarded.session) == []
+
+
+async def test_without_the_guard_two_turns_for_the_same_lead_are_not_serialised(without: AgentEnv) -> None:
+    agent = core(without)
+    order: list[str] = []
+
+    async def first() -> None:
+        async with agent._hook_lead_lock(LEAD):
+            order.append("first-in")
+            await asyncio.sleep(0.1)
+            order.append("first-out")
+
+    async def second() -> None:
+        await asyncio.sleep(0.02)
+        async with agent._hook_lead_lock(LEAD):
+            order.append("second-in")
+
+    await asyncio.gather(first(), second())
+    # with the guard off the lock is a no-op, so the second context is entered while the first still holds
+    # what would otherwise be the lease.
+    assert order == ["first-in", "second-in", "first-out"]
+
+
+# The one-active-booking-per-lead policy ---------------------------------------------------------------------
+
+
+async def test_a_second_booking_becomes_a_reschedule_offer(guarded: AgentEnv) -> None:
+    tools = executor(guarded)
+    first_slot = (await guarded_slots(tools))[0]
+    first = await tools.run("book_slot", {"slot_id": first_slot["slot_id"]})
+    assert first["booked"] is True
+
+    other_slot = (await guarded_slots(tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+    second = await tools.run("book_slot", {"slot_id": other_slot["slot_id"]})
+    assert second["booked"] is False
+    assert second["reason"] == "already_booked"
+    assert second["existing"]["booking_uid"] == first["booking_uid"]
+    assert len(guarded.log("bookings.create")) == 1
+    assert len(guarded.bookings()) == 1
+    assert ("lead_lock", "reschedule_offered") in events(tools)
+
+
+async def test_a_booking_made_outside_the_agent_also_blocks_a_new_one(guarded: AgentEnv) -> None:
+    """The policy reads the calendar, not the ledger: a setup booking (made through the sandbox control
+    API, never through the agent) is not in the ledger but still counts."""
+    uid = guarded.setup_booking(MON_1000)
+    tools = executor(guarded)
+    slot = (await guarded_slots(tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+    result = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert result["booked"] is False
+    assert result["reason"] == "already_booked"
+    assert result["existing"]["booking_uid"] == uid
+    assert len(guarded.log("bookings.create")) == 0
+
+
+async def test_no_active_booking_after_a_cancel_lets_a_new_one_through(guarded: AgentEnv) -> None:
+    uid = guarded.setup_booking(MON_1000)
+    tools = executor(guarded)
+    cancelled = await tools.run("cancel_booking", {"booking_uid": uid, "reason": ""})
+    assert cancelled["cancelled"] is True
+
+    slot = (await guarded_slots(tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+    result = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert result["booked"] is True
+
+
+async def test_a_failed_calendar_read_does_not_block_a_booking(
+    guarded: AgentEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The policy answers ``None`` (book as asked) rather than fail-closed on a read it cannot do; the
+    write itself is still verified by ``claim_ledger``."""
+    guarded.faults({"group": "bookings.list", "mode": "error_500", "times": None})
+    tools = executor(guarded)
+    slot = (await guarded_slots(tools))[0]
+    result = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert result["booked"] is True
+
+
+async def test_without_the_guard_a_second_booking_is_allowed(without: AgentEnv) -> None:
+    tools = executor(without)
+    first_slot = (await guarded_slots(tools))[0]
+    first = await tools.run("book_slot", {"slot_id": first_slot["slot_id"]})
+    assert first["booked"] is True
+
+    other_slot = (await guarded_slots(tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+    second = await tools.run("book_slot", {"slot_id": other_slot["slot_id"]})
+    assert second["booked"] is True
+    assert len(without.bookings()) == 2
+    assert ("lead_lock", "reschedule_offered") not in events(tools)
+
+
+# Through the full pipeline ------------------------------------------------------------------------------
+
+
+async def test_the_reschedule_offer_reply_names_the_existing_booking_through_the_pipeline(
+    guarded: AgentEnv,
+) -> None:
+    first_offer = await guarded.say(ASK)
+    first_pick = next(q for q in first_offer["quick_replies"] if q.get("start_utc"))
+    booked = await guarded.act(first_pick["action"])
+    assert booked["booking"]["action"] == "booked"
+
+    second = await guarded.act({"type": "select_slot", "slot_id": first_pick["action"]["slot_id"]})
+    assert "You already have a call booked for" in second["reply"]
+    assert len(guarded.bookings()) == 1

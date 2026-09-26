@@ -1,0 +1,54 @@
+# The prospect confirms a slot on their own session at the same moment a second channel (a webhook, as if
+# a duplicate integration or a second tab fired) asks to book a different offered slot for the same lead. A
+# `slow` fault widens the create call so the race is not a coin flip that only rarely lands. With the guard
+# the per-lead lease serialises the two turns: whichever books first, the other reads an existing active
+# booking on the calendar (not the ledger, so it catches this too) and turns into a reschedule offer instead
+# of a second create, so exactly one booking exists and the prospect's own session is told the truth about
+# it, whichever reply arrives last. Without it both channels create a booking: a genuine double booking.
+guard: lead_lock
+title: A confirming pick on one channel and a booking request on another do not both book
+scenario:
+  id: lead-lock-concurrent-channel
+  title: Book while a second channel asks for another offered slot
+  tags: [fault]
+  harness_fault: {type: concurrent_channel, pick: 1}
+  faults:
+    - {group: bookings.create, mode: slow, latency_ms: 300}
+  persona:
+    given_name: Elif
+    initial: Y
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    timezone_hint: null
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 10}
+      start: "09:00"
+      end: "17:00"
+    correction: "Any time {{window.dates_text}} works, between 9 am and 5 pm New York time."
+    script:
+      - say: "Hi, I'd like to book an intro call this week or next. I'm in New York."
+      - say: "Eastern time, New York."
+        when: agent_asks_timezone
+      - pick: in_window
+      - say: "Yes, please book it."
+        when: agent_asks_confirmation
+      - say: "Thanks."
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - active_bookings: {eq: 1}
+    - guard_event: {guard: lead_lock, event: reschedule_offered}
+expect_off:
+  outcome: double_booking
+  assert:
+    - active_bookings: {eq: 2}
+  assert_not:
+    - guard_event: {guard: lead_lock, event: reschedule_offered}

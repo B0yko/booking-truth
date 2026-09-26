@@ -693,8 +693,28 @@ class ToolExecutor:
     async def _hook_existing_booking(self) -> BookingRecord | None:
         """Hook for ``lead_lock``'s policy: one active booking per lead and event key. A booking returned here
         turns a new booking into a reschedule offer (``already_booked``); the calendar is the source, since a
-        booking made outside the agent counts too. ``None``: book as asked."""
-        return None
+        booking made outside the agent counts too. ``None``: book as asked.
+
+        The calendar, not the ledger, because a booking made outside the agent (a setup booking, one from
+        another channel this session's ledger never recorded) is not in the ledger but is still real. The
+        lookup is not scoped to this session or channel: the policy is a per-lead lock across all of them.
+        A calendar that cannot be read right now answers ``None`` (book as asked) rather than blocking a
+        booking on a read failure; the write itself still goes through ``claim_ledger``'s read-back."""
+        if not self.on("lead_lock"):
+            return None
+        now = self.now
+        start, end = now - timedelta(days=LIST_PAST_DAYS), now + timedelta(days=LIST_FUTURE_DAYS)
+        found = await self.deps.calendar.list_bookings(lead_email=self.ctx.lead_email, start=start, end=end)
+        if self._retry_lookup(found):
+            found = await self.deps.calendar.list_bookings(
+                lead_email=self.ctx.lead_email, start=start, end=end
+            )
+        if isinstance(found, Unavailable):
+            return None
+        active = next((b for b in found if b.active), None)
+        if active is not None:
+            self.state.event("lead_lock", "reschedule_offered", f"existing={active.ref}")
+        return active
 
     async def _hook_write_key(
         self, kind: Literal["create", "reschedule", "cancel"], *, start: datetime | None, ref: str | None

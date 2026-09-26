@@ -387,18 +387,21 @@ async def test_naive_list_uses_utc_times(naive: AgentEnv) -> None:
 
 
 async def test_the_widget_reaches_only_bookings_of_its_own_session(guarded: AgentEnv) -> None:
-    outside = guarded.setup_booking(MON_1000)
     tools = executor(guarded, channel="widget", session="w-1")
     assert await tools.run("list_my_bookings", {}) == {"bookings": []}
+    slot = (await guarded_slots(tools))[0]
+    booked = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert guarded.deps.store.widget_bookings.owns("w-1", booked["booking_uid"])
+    # Made outside the widget session, on a different day so it does not collide with the slot just
+    # booked: ``lead_lock``'s policy reads the calendar, not just this session, so it does count from here.
+    outside = guarded.setup_booking(MON_1000 + timedelta(days=2))
     assert await tools.run("cancel_booking", {"booking_uid": outside, "reason": ""}) == {
         "cancelled": False,
         "reason": "not_allowed",
     }
-    slot = (await guarded_slots(tools))[0]
-    moved = await tools.run("reschedule_booking", {"booking_uid": outside, "slot_id": slot["slot_id"]})
+    target = (await guarded_slots(tools, date(2026, 10, 8), date(2026, 10, 8)))[0]
+    moved = await tools.run("reschedule_booking", {"booking_uid": outside, "slot_id": target["slot_id"]})
     assert moved["reason"] == "not_allowed"
-    booked = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
-    assert guarded.deps.store.widget_bookings.owns("w-1", booked["booking_uid"])
     listed = await tools.run("list_my_bookings", {})
     assert [b["booking_uid"] for b in listed["bookings"]] == [booked["booking_uid"]]
     other_session = executor(guarded, channel="widget", session="w-2")

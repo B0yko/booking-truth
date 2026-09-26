@@ -23,9 +23,11 @@ Every guard is evaluated from configuration at its hook point (the ``_hook_*`` m
 
 from __future__ import annotations
 
+import asyncio
 import json
+import uuid
 from collections.abc import AsyncIterator, Sequence
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -84,6 +86,9 @@ from booking_truth.trace.validate import trace_errors
 
 QUICK_REPLY_SLOTS = 6
 TRACE_SOURCE = f"booking-truth-agent/{__version__}"
+#: How often the lead's lease is renewed while a turn holds it (the lease itself is
+#: :data:`~booking_truth.store.repos.LEAD_LOCK_LEASE_S`, comfortably longer than this).
+LEAD_LOCK_RENEW_S = 10.0
 
 
 @dataclass
@@ -295,8 +300,41 @@ class AgentCore:
     @asynccontextmanager
     async def _hook_lead_lock(self, email: str) -> AsyncIterator[None]:
         """Hook for ``lead_lock``: hold the lead's lease for the turn (renewed while it runs); raise
-        :class:`LeadBusy` when it cannot be taken within the wait."""
-        yield
+        :class:`LeadBusy` when it cannot be taken within the wait.
+
+        The lease is keyed by the normalised email (:meth:`~booking_truth.store.repos.LocksRepo.lead_key`),
+        so a prospect writing on two channels at once (the widget and a webhook, two tabs) is serialised
+        to one turn at a time; a turn that cannot take the lease within
+        :data:`~booking_truth.store.repos.LEAD_LOCK_WAIT_S` gets ``409 lead_busy`` instead of running
+        concurrently with the one that holds it. A background task renews the lease every
+        :data:`LEAD_LOCK_RENEW_S` for as long as the turn runs, comfortably inside the lease itself, and is
+        cancelled and awaited before the lease is released, win or fail."""
+        if not self.on("lead_lock"):
+            yield
+            return
+        locks = self.store.locks
+        key = locks.lead_key(email)
+        owner = uuid.uuid4().hex
+        if not await locks.await_acquire(key, owner):
+            raise LeadBusy
+        renewal = asyncio.create_task(self._renew_lead_lock(key, owner))
+        try:
+            yield
+        finally:
+            renewal.cancel()
+            with suppress(asyncio.CancelledError):
+                await renewal
+            locks.release(key, owner)
+
+    async def _renew_lead_lock(self, key: str, owner: str) -> None:
+        """Keeps ``lead_lock``'s lease alive while the turn runs; cancelled from
+        :meth:`_hook_lead_lock`'s ``finally`` once it is done. Stops on its own if the lease was ever lost
+        (it cannot have been, short of a bug, since only its owner extends it, but a lost lease is not
+        worth renewing forever)."""
+        while True:
+            await asyncio.sleep(LEAD_LOCK_RENEW_S)
+            if not self.store.locks.renew(key, owner):
+                return
 
     def _hook_tz_prescan(self, text: str, ctx: TurnContext) -> str | None:
         """Hook for ``tz_resolver``: resolve a zone the prospect states in ``text`` before the model

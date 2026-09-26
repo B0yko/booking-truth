@@ -182,16 +182,19 @@ async def test_a_persistent_timeout_gives_up_and_a_later_attempt_dispatches_fres
 # A repeated write of the same intent is not a second booking ------------------------------------------------
 
 
-async def test_repeating_book_slot_for_the_same_slot_does_not_double_book(guarded: AgentEnv) -> None:
-    tools = executor(guarded)
+async def test_repeating_book_slot_for_the_same_slot_does_not_double_book(no_lock: AgentEnv) -> None:
+    """Isolated from ``lead_lock`` (also on by default, and it would answer ``already_booked`` for the
+    second call before idempotency ever computed a key for it): a repeated write of the same intent is
+    idempotency's own replay, not a policy decision."""
+    tools = executor(no_lock)
     slot = (await guarded_slots(tools))[0]
     first = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
     assert first["booked"] is True
     again = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
     assert again["booked"] is True
     assert again["booking_uid"] == first["booking_uid"]
-    assert len(guarded.log("bookings.create")) == 1
-    assert len(guarded.bookings()) == 1
+    assert len(no_lock.log("bookings.create")) == 1
+    assert len(no_lock.bookings()) == 1
     assert ("idempotency", "replayed") in events(tools)
 
 
@@ -243,4 +246,10 @@ def idem_row_count(env: AgentEnv) -> int:
 @pytest.fixture
 async def without(sandbox: Sandbox, tmp_path: Path) -> AsyncIterator[AgentEnv]:
     async for env in make_env(sandbox, tmp_path, guards=WITHOUT):
+        yield env
+
+
+@pytest.fixture
+async def no_lock(sandbox: Sandbox, tmp_path: Path) -> AsyncIterator[AgentEnv]:
+    async for env in make_env(sandbox, tmp_path, guards=guards_string(all_except("lead_lock"))):
         yield env
