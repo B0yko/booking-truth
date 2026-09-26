@@ -586,6 +586,8 @@ def test_handoffs_are_listed_and_marked_delivered(store: Store) -> None:
     second = store.handoffs.create(lead_email=LEAD, summary="Booking unconfirmed")
     assert second.preferred_times_text == ""
     assert store.handoffs.items() == [first, second]
+    assert store.handoffs.for_session("s1") == [first]
+    assert store.handoffs.for_session("s2") == []
     store.handoffs.mark_delivered(first.id)
     delivered = store.handoffs.get(first.id)
     assert delivered is not None

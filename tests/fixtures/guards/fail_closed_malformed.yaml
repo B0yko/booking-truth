@@ -1,0 +1,52 @@
+# The availability lookup answers 200 with a body of the wrong shape on every call: the host's busy periods
+# instead of free slots. With the guard the strict adapter reads that as Unavailable("malformed"), the lookup
+# is retried once, and the prospect is told the calendar is unavailable and handed off. Without it the
+# lenient parser scrapes every timestamp in the body into "free" slots, so the busy times are offered.
+guard: fail_closed
+title: A malformed availability answer is unavailable, never free time
+scenario:
+  id: fail-closed-slots-malformed
+  title: Book a call while the slots endpoint returns a malformed body on every call
+  tags: [fault, impossible]
+  faults:
+    - {group: slots, mode: malformed, times: null}
+  persona:
+    given_name: Hugo
+    initial: E
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "09:00"
+      end: "17:00"
+    correction: "Any time {{window.dates_text}} works, between 9 am and 5 pm New York time."
+    script:
+      - say: "Hi, I'd like to book an intro call in the next few days. I'm in New York."
+      # Only an agent that offers times it never got from the calendar reaches this step.
+      - pick: in_window
+        when: agent_offered_slots
+      - say: "Okay, I'll wait to hear from you. Thanks."
+        end: true
+  expect:
+    bookings: 0
+    status: none
+    in_window: false
+expect_on:
+  outcome: pass
+  assert:
+    - guard_event: {guard: fail_closed, event: lookup_retried}
+    - guard_event: {guard: fail_closed, event: calendar_unavailable}
+    - reply_matches: "calendar isn't available right now"
+    - handoffs: {eq: 1}
+    - active_bookings: {eq: 0}
+  assert_not:
+    - reply_matches: "Here are some open times"
+expect_off:
+  outcome: invented_slot
+  assert:
+    - reply_matches: "Here are some open times"
+  assert_not:
+    - guard_event: {guard: fail_closed, event: calendar_unavailable}

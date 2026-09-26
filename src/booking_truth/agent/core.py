@@ -9,7 +9,7 @@ One turn, in order (``docs/adr`` and the guard list in the README):
 5. ``tz_resolver`` pre-scan of the prospect's text;
 6. a structured action runs a code path; text runs the LLM tool loop (at most 8 model calls);
 7. ``claim_ledger`` claim check of the reply (with offer grounding under ``fail_closed``), one repair, then a
-   safe template;
+   safe template; ``fail_closed``: a turn that ends with the calendar unavailable hands the conversation off;
 8. ``rendered_confirmation``: code renders the confirmation line of every verified write of the turn from its
    ledger entry and puts it above the reply;
 9. quick replies from state; 10. persist history, trace steps and the response;
@@ -37,6 +37,12 @@ from booking_truth import __version__
 from booking_truth.agent import render
 from booking_truth.agent.guards import GuardConfig
 from booking_truth.agent.guards.claim_check import CheckResult, LedgerFact, check_reply, guard_note
+from booking_truth.agent.guards.fail_closed import (
+    HANDOFF_SUMMARY,
+    last_read_failed,
+    offer_reference,
+    unavailable_now,
+)
 from booking_truth.agent.loop import (
     AGENT_TEMPERATURE,
     MAX_TOKENS,
@@ -136,10 +142,26 @@ class TurnResult:
         self.claims = tuple(claims)
         body = {"reply": reply, "claims": [c.to_json() for c in claims]}
         final = ChatMessage.assistant(json.dumps(body, ensure_ascii=False))
-        if self.messages and self.messages[-1].role == "assistant" and not self.messages[-1].tool_calls:
+        if self._has_final():
             self.messages[-1] = final
         else:
             self.messages.append(final)
+
+    def _has_final(self) -> bool:
+        last = self.messages[-1] if self.messages else None
+        return last is not None and last.role == "assistant" and not last.tool_calls
+
+    def add_call(self, name: str, args: dict[str, Any], output: Any) -> None:
+        """Record a tool call that code made after the final answer, before that answer in the turn's
+        history, so the model sees next turn that it happened."""
+        call_id = f"code_{len(self.messages)}_{name}"
+        content = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
+        pair = [
+            ChatMessage.assistant(None, [ToolCall(call_id, name, json.dumps(args, ensure_ascii=False))]),
+            ChatMessage.tool(call_id, content, name=name),
+        ]
+        at = len(self.messages) - 1 if self._has_final() else len(self.messages)
+        self.messages[at:at] = pair
 
 
 def history_entry(message: ChatMessage) -> tuple[str, dict[str, Any]]:
@@ -173,23 +195,6 @@ def history_message(role: str, content: Any) -> ChatMessage | None:
         )
     except ValueError:
         return None
-
-
-CALENDAR_READS = frozenset({"find_slots", "list_my_bookings"})
-
-
-def last_read_failed(messages: Sequence[ChatMessage]) -> bool:
-    """Whether the last calendar read (``find_slots`` or ``list_my_bookings``) in ``messages`` failed."""
-    for message in reversed(messages):
-        if message.role != "tool" or message.name not in CALENDAR_READS:
-            continue
-        content = message.content or ""
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError:
-            return content.startswith("Error: calendar")
-        return isinstance(data, dict) and bool(data.get("unavailable"))
-    return False
 
 
 class AgentCore:
@@ -290,7 +295,8 @@ class AgentCore:
         offer reference, every offered time); a model reply that fails gets one repair call with a guard note,
         and a reply that still fails (or a code-rendered one) becomes the safe template."""
         facts = self._ledger_facts(ctx)
-        check = self._check(ctx, result.reply, result.claims, facts)
+        offers = self._hook_offer_reference(ctx, [*history, *result.messages])
+        check = self._check(ctx, result.reply, result.claims, facts, offers)
         if check.ok:
             return result
         ctx.state.event("claim_ledger", "claim_blocked", check.summary())
@@ -299,23 +305,32 @@ class AgentCore:
                 ctx, result, check, facts, executor=executor, system=system, history=history, usage=usage
             )
             if answer is not None and answer.reply.strip():
-                recheck = self._check(ctx, answer.reply, answer.claims, facts)
+                recheck = self._check(ctx, answer.reply, answer.claims, facts, offers)
                 if recheck.ok:
                     ctx.state.event("claim_ledger", "repaired", answer.reply)
                     result.set_final(answer.reply, answer.claims)
                     result.repaired = True
                     return result
                 ctx.state.event("claim_ledger", "repair_blocked", recheck.summary())
-        reply = await self._safe_reply(ctx, executor, check, facts, [*history, *result.messages])
+        reply = await self._safe_reply(ctx, executor, check, facts, result, history)
         ctx.state.event("claim_ledger", "safe_template", reply)
         result.set_final(reply)
         result.blocked = True
         return result
 
-    def _hook_offer_reference(self, ctx: TurnContext) -> Sequence[datetime] | None:
-        """Hook for ``fail_closed``'s offer grounding inside the claim check: the starts every offered time
-        must come from (the lead's latest successful slot list). ``None``: offers are not checked."""
-        return None
+    def _hook_offer_reference(
+        self, ctx: TurnContext, conversation: Sequence[ChatMessage]
+    ) -> Sequence[datetime] | None:
+        """``fail_closed``'s offer grounding inside the claim check: the starts every specific time in a reply
+        must come from. They are the lead's latest successful slot list while it is fresh (the list a slot
+        id can still be booked from) and the lead's bookings the calendar reported in ``conversation`` (the
+        call being moved or cancelled); the claim check adds the ledger's verified starts. With no fresh
+        list the reference is only those bookings, so a reply offers no times until a lookup succeeds.
+        ``None`` (guard off): offers are not checked."""
+        if not self.on("fail_closed"):
+            return None
+        ttl = float(self.settings.slot_ttl_seconds)
+        return offer_reference(self.store.slot_lists.latest(ctx.lead_email, ttl_s=ttl), conversation)
 
     def _ledger_facts(self, ctx: TurnContext) -> list[LedgerFact]:
         claims, key = self.store.claims, self.deps.calendar.event_key
@@ -328,17 +343,26 @@ class AgentCore:
         return facts
 
     def _check(
-        self, ctx: TurnContext, reply: str, claims: Sequence[DeclaredClaim], facts: Sequence[LedgerFact]
+        self,
+        ctx: TurnContext,
+        reply: str,
+        claims: Sequence[DeclaredClaim],
+        facts: Sequence[LedgerFact],
+        offers: Sequence[datetime] | None,
     ) -> CheckResult:
-        return check_reply(
+        result = check_reply(
             reply,
             [(c.type, c.time) for c in claims],
             facts,
             zone=ctx.zone,
             now=ctx.now,
             host_zone=self.settings.host_timezone,
-            offer_reference=self._hook_offer_reference(ctx),
+            offer_reference=offers,
         )
+        ungrounded = [v.detail for v in result.violations if v.problem == "not_offered"]
+        if ungrounded:
+            ctx.state.event("fail_closed", "offer_blocked", "; ".join(ungrounded))
+        return result
 
     async def _repair(
         self,
@@ -383,7 +407,8 @@ class AgentCore:
         executor: ToolExecutor,
         check: CheckResult,
         facts: Sequence[LedgerFact],
-        conversation: Sequence[ChatMessage],
+        result: TurnResult,
+        history: Sequence[ChatMessage],
     ) -> str:
         """The safe template: nothing was booked (or changed, for a reschedule or cancel claim, or when the
         lead already had a booking), plus the next step: a hand-off while the calendar is unavailable (its
@@ -399,15 +424,38 @@ class AgentCore:
         had_booking = any(f.current and f.action != "cancelled" and f.ref not in written for f in facts)
         changed = bool(check.kinds & {"rescheduled", "cancelled"}) or had_booking
         first = render.SAFE_NOT_CHANGED if changed else render.SAFE_NOT_BOOKED
-        if not (ctx.state.calendar_unavailable or last_read_failed(conversation)):
+        if not (ctx.state.calendar_unavailable or last_read_failed([*history, *result.messages])):
             return f"{first} {render.NEXT_STEP_LOOK}"
-        handed_off = any(m.role == "tool" and m.name == "handoff_to_human" for m in conversation)
-        if not (ctx.state.handoffs or handed_off):
-            user = next((m.content or "" for m in reversed(conversation) if m.role == "user"), "")
-            await executor.handoff(
-                "The prospect asked for a call, but the calendar is unavailable.", user[:300]
-            )
+        await self._handoff_once(ctx, executor, result)
         return f"{first} {render.NEXT_STEP_HANDOFF}"
+
+    async def _handoff_once(self, ctx: TurnContext, executor: ToolExecutor, result: TurnResult) -> str | None:
+        """Hand the conversation off because the calendar is unavailable, unless it already was handed off
+        (by the model or by code, in any turn of this session). The call goes into the turn's history before
+        the final answer, so the model sees next turn that it happened. Returns the hand-off's reference, or
+        ``None`` when there already was one."""
+        if self.store.handoffs.for_session(ctx.session_id):
+            return None
+        args = {"summary": HANDOFF_SUMMARY, "preferred_times_text": result.user_text[:300]}
+        output = await executor.run("handoff_to_human", args)
+        result.add_call("handoff_to_human", args, output)
+        return str(output.get("reference") or "") if isinstance(output, dict) else ""
+
+    async def _hook_unavailable_handoff(
+        self, ctx: TurnContext, executor: ToolExecutor, result: TurnResult
+    ) -> None:
+        """``fail_closed``: while the calendar is unavailable (the turn's last calendar call was a read that
+        failed even after its retry), the prospect is told so and a colleague follows up by email. When
+        nobody has handed this conversation off yet, code makes the hand-off the model did not make, records
+        it in the turn's history and adds the hand-off sentence to the reply."""
+        if not unavailable_now(result.messages):
+            return
+        reference = await self._handoff_once(ctx, executor, result)
+        if reference is None:
+            return
+        ctx.state.event("fail_closed", "handoff", reference)
+        if render.NEXT_STEP_HANDOFF not in result.reply:
+            result.set_final(f"{result.reply}\n\n{render.NEXT_STEP_HANDOFF}", result.claims)
 
     async def _hook_crm_outbox(self, ctx: TurnContext) -> None:
         """Hook for ``crm_outbox``: queue a validated CRM payload for each verified write of the turn."""
@@ -508,6 +556,8 @@ class AgentCore:
             result = await self._claim_ledger(
                 ctx, executor, result, system=system or self.system_prompt(ctx), history=history, usage=usage
             )
+        if self.on("fail_closed"):
+            await self._hook_unavailable_handoff(ctx, executor, result)
         if statement and ctx.zone not in result.reply:
             result.reply = f"{result.reply}\n\n{statement}"
         self._add_confirmations(ctx, result)
@@ -788,7 +838,7 @@ class AgentCore:
                     user_text, reply, calls=calls, claims=claims, reschedule_for=reschedule_for
                 )
             if not isinstance(result, dict) or result.get("unavailable") or "error" in result:
-                if not ctx.state.handoffs:
+                if not self.store.handoffs.for_session(ctx.session_id):
                     handoff = await executor.handoff(
                         "The prospect asked for times, but the calendar is unavailable.", ""
                     )

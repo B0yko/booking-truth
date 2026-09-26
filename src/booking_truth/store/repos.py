@@ -1192,6 +1192,13 @@ class HandoffsRepo(_Repo):
         ).fetchall()
         return [_handoff(row) for row in rows]
 
+    def for_session(self, session_id: str) -> list[Handoff]:
+        """The hand-offs made in one conversation, oldest first."""
+        rows = self._conn.execute(
+            "SELECT * FROM handoffs WHERE session_id = ? ORDER BY id", (session_id,)
+        ).fetchall()
+        return [_handoff(row) for row in rows]
+
     def mark_delivered(self, handoff_id: int) -> None:
         cursor = self._conn.execute("UPDATE handoffs SET delivered = 1 WHERE id = ?", (handoff_id,))
         if cursor.rowcount != 1:

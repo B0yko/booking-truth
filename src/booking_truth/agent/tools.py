@@ -601,6 +601,23 @@ class ToolExecutor:
         zone = self.ctx.zone if self.mode == "guarded" else "UTC"
         return await self.find_slots(first, last, zone)
 
+    def _retry_lookup(self, found: object) -> bool:
+        """``fail_closed``: whether to try a safe lookup once more. An error, a timeout or a malformed answer
+        may be transient; ``not_found`` (a wrong event type or calendar) is not."""
+        if isinstance(found, Unavailable) and self.on("fail_closed") and found.reason != "not_found":
+            self.state.event("fail_closed", "lookup_retried", found.reason)
+            return True
+        return False
+
+    def _unavailable(self, found: Unavailable) -> Any:
+        """A read that failed (after its retry): with ``fail_closed``, a structured result that tells the
+        model to say so and hand off, never an empty list of times; without it, the vendor's text."""
+        self.state.calendar_unavailable = True
+        if self.on("fail_closed"):
+            self.state.event("fail_closed", "calendar_unavailable", found.reason)
+            return {"unavailable": True, "reason": found.reason, "instruction": UNAVAILABLE_INSTRUCTION}
+        return error_text(found.detail or found.reason)
+
     async def find_slots(self, first: date, last: date, dates_zone: str) -> Any:
         """Look up free slots for local dates ``first..last`` in ``dates_zone`` and store the list."""
         start, end = local_day_bounds(first, last, dates_zone)
@@ -609,15 +626,10 @@ class ToolExecutor:
             found: Slots | Unavailable = Slots(())
         else:
             found = await self.deps.calendar.find_slots(start, end)
-            if isinstance(found, Unavailable) and self.on("fail_closed") and found.reason != "not_found":
-                self.state.event("fail_closed", "lookup_retried", found.reason)
+            if self._retry_lookup(found):
                 found = await self.deps.calendar.find_slots(start, end)
         if isinstance(found, Unavailable):
-            self.state.calendar_unavailable = True
-            if self.on("fail_closed"):
-                self.state.event("fail_closed", "calendar_unavailable", found.reason)
-                return {"unavailable": True, "reason": found.reason, "instruction": UNAVAILABLE_INSTRUCTION}
-            return error_text(found.detail or found.reason)
+            return self._unavailable(found)
         return self._slot_result(list(found.slots))
 
     def _slot_result(self, slots: list[Slot]) -> Any:
@@ -772,7 +784,11 @@ class ToolExecutor:
         return "unknown", None, None, result.detail or result.reason
 
     def _existing_view(self, existing: BookingRecord) -> dict[str, str]:
-        return {"booking_uid": existing.ref, "label": self._label(existing.start)}
+        return {
+            "booking_uid": existing.ref,
+            "label": self._label(existing.start),
+            "start_utc": iso_z(existing.start),
+        }
 
     async def _book_slot(self, args: dict[str, Any]) -> Any:
         slot_id = self._text(args, "slot_id")
@@ -942,12 +958,15 @@ class ToolExecutor:
     # list_my_bookings ------------------------------------------------------------------------------------
 
     async def bookings(self) -> list[BookingRecord] | Unavailable:
+        """The lead's active bookings (on the widget channel, only this session's); with ``fail_closed`` a
+        failed lookup is tried once more before it counts as unavailable."""
         now = self.now
-        found = await self.deps.calendar.list_bookings(
-            lead_email=self.ctx.lead_email,
-            start=now - timedelta(days=LIST_PAST_DAYS),
-            end=now + timedelta(days=LIST_FUTURE_DAYS),
-        )
+        start, end = now - timedelta(days=LIST_PAST_DAYS), now + timedelta(days=LIST_FUTURE_DAYS)
+        found = await self.deps.calendar.list_bookings(lead_email=self.ctx.lead_email, start=start, end=end)
+        if self._retry_lookup(found):
+            found = await self.deps.calendar.list_bookings(
+                lead_email=self.ctx.lead_email, start=start, end=end
+            )
         if isinstance(found, Unavailable):
             return found
         return [b for b in found if b.active and self._allowed(b.ref)]
@@ -955,11 +974,7 @@ class ToolExecutor:
     async def _list_my_bookings(self, args: dict[str, Any]) -> Any:
         found = await self.bookings()
         if isinstance(found, Unavailable):
-            self.state.calendar_unavailable = True
-            if self.on("fail_closed"):
-                self.state.event("fail_closed", "calendar_unavailable", found.reason)
-                return {"unavailable": True, "reason": found.reason, "instruction": UNAVAILABLE_INSTRUCTION}
-            return error_text(found.detail or found.reason)
+            return self._unavailable(found)
         if self.mode == "naive":
             return {
                 "bookings": [

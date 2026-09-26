@@ -347,7 +347,7 @@ async def test_a_wrong_time_in_a_confirmation_is_blocked(sandbox: Sandbox, tmp_p
         offer = await env.say(BERLIN_ASK)
         data = await env.say(f"{first_offer(offer)} works for me.")
         assert events(data) == ["verified", "claim_blocked", "repair_blocked", "safe_template"]
-        detail = data["guard"]["events"][1]["detail"]
+        [detail] = [e["detail"] for e in data["guard"]["events"] if e["event"] == "claim_blocked"]
         assert "for the booking, but the verified booking is" in detail
         assert "Europe/Berlin (UTC+02:00)" in detail
         assert data["reply"] == SAFE_LOOK
