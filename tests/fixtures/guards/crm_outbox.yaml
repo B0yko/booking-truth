@@ -2,10 +2,6 @@
 # sits in the SQLite outbox and the retried delivery still lands the meeting in HubSpot. Without it, the
 # naive prose rule calls the CRM once, inline, with no retry, so the transient error loses the meeting for
 # good: the calendar shows the booking but HubSpot never gets it, a CRM mismatch.
-#
-# Skipped for now (see tests/guards/test_guard_fixtures.py): it needs the HubSpot adapter and the outbox
-# delivery worker, both of a later milestone. The enqueue rule, the payload schemas and the naive prose rule
-# are already covered by tests/agent/test_crm_outbox.py and tests/crm/test_crm.py, with the null adapter.
 guard: crm_outbox
 title: A transient CRM error is retried from the outbox instead of losing the meeting
 grade_crm: true

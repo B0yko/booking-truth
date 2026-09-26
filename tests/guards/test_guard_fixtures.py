@@ -31,8 +31,6 @@ def test_there_are_guard_fixtures() -> None:
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 async def test_guard_fixture(path: Path, mode: Mode) -> None:
     fixture = load_fixture(path)
-    if fixture.guard == "crm_outbox":
-        pytest.skip("the HubSpot adapter and the outbox delivery worker are not part of this build yet")
     expectation = fixture.expect_on if mode == "on" else fixture.expect_off
     for calendar in resolved_calendars(fixture):
         observation = await run_fixture(fixture, mode, calendar)

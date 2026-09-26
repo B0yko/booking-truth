@@ -33,6 +33,7 @@ from booking_truth.agent.core import AgentCore, AgentDeps
 from booking_truth.agent.guards import GuardConfig
 from booking_truth.agent.loop import AGENT_TEMPERATURE
 from booking_truth.agent.models import ChatRequest, ErrorBody
+from booking_truth.agent.outbox_worker import OutboxWorker
 from booking_truth.agent.ratelimit import SlidingWindowLimiter, client_key
 from booking_truth.agent.scripted import FakeLLM
 from booking_truth.agent.tools import HandoffNotifier, tool_specs
@@ -158,12 +159,15 @@ def create_agent_app(
     )
     core = AgentCore(deps)
     limiter = SlidingWindowLimiter()
+    outbox_worker = OutboxWorker(store, crm)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        outbox_worker.start()
         try:
             yield
         finally:
+            await outbox_worker.stop()
             await handoffs.drain()
             for close in closers:
                 with contextlib.suppress(Exception):
@@ -180,6 +184,7 @@ def create_agent_app(
     )
     app.state.core = core
     app.state.deps = deps
+    app.state.outbox_worker = outbox_worker
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,

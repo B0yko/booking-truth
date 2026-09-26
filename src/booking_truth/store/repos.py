@@ -1039,6 +1039,24 @@ class OutboxRepo(_Repo):
         ).fetchall()
         return [_outbox(row) for row in rows]
 
+    def due_per_lead(self, *, limit: int = 10) -> list[OutboxItem]:
+        """Due items, at most one per lead: each lead's own oldest pending item, and only when it is due.
+
+        A worker that drains through this instead of :meth:`due` never delivers a lead's events out of
+        order: a lead's next item is not picked while an earlier one of that same lead is still pending, so
+        a retry that pushes one item's ``next_attempt_at`` later can never let a newer item of the same lead
+        (say, a cancel enqueued after a booking whose CRM write is still retrying) jump ahead of it. Items of
+        different leads are independent and interleave freely.
+        """
+        rows = self._conn.execute(
+            "SELECT o.* FROM outbox o JOIN ("
+            "  SELECT lead_email, MIN(id) AS min_id FROM outbox WHERE status = 'pending' GROUP BY lead_email"
+            ") picked ON o.lead_email = picked.lead_email AND o.id = picked.min_id "
+            "WHERE o.next_attempt_at <= ? ORDER BY o.next_attempt_at, o.id LIMIT ?",
+            (_stamp(self._now()), limit),
+        ).fetchall()
+        return [_outbox(row) for row in rows]
+
     def mark_done(self, item_id: int) -> OutboxItem:
         """Record the successful attempt."""
         return self._attempt(item_id, error=None)
@@ -1046,6 +1064,26 @@ class OutboxRepo(_Repo):
     def mark_failed(self, item_id: int, error: str) -> OutboxItem:
         """Record a failed attempt: schedule the next one, or mark the item ``failed`` after 20."""
         return self._attempt(item_id, error=error)
+
+    def mark_permanently_failed(self, item_id: int, error: str) -> OutboxItem:
+        """Give up on a ``pending`` item without scheduling another attempt (a non-retryable CRM error, or
+        an item this delivery worker does not recognise): ``failed`` right away instead of after 20 attempts
+        that would only repeat the same rejection."""
+        now = self._now()
+        with immediate(self._conn) as conn:
+            row = conn.execute("SELECT status, attempts FROM outbox WHERE id = ?", (item_id,)).fetchone()
+            if row is None:
+                raise StoreError(f"unknown outbox item {item_id}")
+            if row["status"] != "pending":
+                raise StoreError(f"outbox item {item_id} is {row['status']}, not pending")
+            updated = _returned(
+                conn.execute(
+                    "UPDATE outbox SET status = 'failed', attempts = ?, next_attempt_at = NULL, "
+                    "last_error = ?, updated_at = ? WHERE id = ? RETURNING *",
+                    (int(row["attempts"]) + 1, error[:_MAX_ERROR_CHARS], _stamp(now), item_id),
+                )
+            )
+        return _outbox(updated)
 
     def _attempt(self, item_id: int, *, error: str | None) -> OutboxItem:
         now = self._now()
