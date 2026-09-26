@@ -220,3 +220,24 @@ async def test_create_meeting_malformed_is_retryable(env: HubEnv, hubspot: HubSp
     )
     assert isinstance(result, CrmError)
     assert (result.reason, result.retryable) == ("malformed", True)
+
+
+async def test_update_meeting_malformed_is_retryable(env: HubEnv, hubspot: HubSpotAdapter) -> None:
+    """A ``2xx`` whose body is not a ``SimplePublicObject`` must not be read as success, the same rule
+    ``create_meeting`` and the contact writes already follow."""
+    contact = await hubspot.upsert_contact(ContactPayload(email=LEAD))
+    assert isinstance(contact, CrmOk)
+    meeting = await hubspot.create_meeting(
+        MeetingPayload(
+            contact_id=contact.id, booking_ref="b1", title="Intro call", start_utc=START, end_utc=END
+        )
+    )
+    assert isinstance(meeting, CrmOk)
+    env.faults({"group": "crm.meetings.update", "mode": "malformed", "times": 1})
+    result = await hubspot.update_meeting(
+        MeetingUpdatePayload(
+            meeting_id=meeting.id, booking_ref="b1", outcome="CANCELED", start_utc=START, end_utc=END
+        )
+    )
+    assert isinstance(result, CrmError)
+    assert (result.reason, result.retryable) == ("malformed", True)

@@ -316,7 +316,10 @@ class HubSpotAdapter:
         if isinstance(response, CrmError):
             return response
         if response.is_success:
-            return CrmOk(payload.meeting_id)
+            found = _object_id(_json_or_none(response))
+            if found is None:
+                return CrmError("malformed", "the updated meeting has no id", retryable=True)
+            return CrmOk(found)
         return self._error_for(response)
 
 
