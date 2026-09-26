@@ -338,6 +338,26 @@ async def test_a_repair_that_does_not_help_gets_the_safe_template(
             assert failed == [outcome]
 
 
+NO_FAIL_CLOSED = guards_string(all_except("fail_closed"))
+
+
+async def test_a_phantom_booking_phrase_the_lexicon_missed_is_blocked(
+    sandbox: Sandbox, tmp_path: Path
+) -> None:
+    """A model that never populates the ``claims`` field, and phrases a completed booking in words the
+    deterministic detector must catch (``agent/guards/lexicon.py``), must not slip a phantom booking past
+    the claim check just because nothing else grounds it. With ``fail_closed`` off there is no offer
+    grounding to catch the invented time as a side effect, so the claim check is the only guard in play."""
+    llm = Fixed("I've got you down for Tuesday 6 October, 3:00 PM. Talk soon!")
+    async for env in make_env(sandbox, tmp_path, llm=llm, guards=NO_FAIL_CLOSED):
+        data = await env.say("Can I book an intro call next week?")
+        assert data["reply"] == SAFE_LOOK
+        assert data["guard"]["blocked"] is True
+        assert data["booking"] is None
+        assert env.bookings() == []
+        assert env.deps.store.claims.current_bookings(LEAD) == []
+
+
 async def test_a_wrong_time_in_a_confirmation_is_blocked(sandbox: Sandbox, tmp_path: Path) -> None:
     """Without ``rendered_confirmation`` the claim check can only block a garbled confirmation: the booking
     exists, and the prospect is told nothing is booked (the failure that rendered confirmations remove)."""

@@ -138,6 +138,16 @@ def test_declared_claims_of_unknown_types_are_ignored() -> None:
     assert check("Hello", declared=[("offered", "Tuesday 6 October, 3:00 PM")]).ok  # no offer reference
 
 
+def test_a_phantom_booking_phrase_the_lexicon_misses_is_still_blocked() -> None:
+    # A tool error (or a careless model) leaves nothing booked, but the model's prose still tells the
+    # prospect the call is on, in a paraphrase the lexicon must catch. The claimed time is one that really
+    # was offered, so offer grounding alone (fail_closed) cannot catch it either: only the claim check can.
+    reply = "I've got you down for Tuesday 6 October, 3:00 PM. Talk soon!"
+    result = check(reply, facts=[], declared=[], offers=[TUE])
+    assert not result.ok
+    assert problems(result) == [("booked", "no_entry")]
+
+
 # Offer grounding --------------------------------------------------------------------------------------------
 
 

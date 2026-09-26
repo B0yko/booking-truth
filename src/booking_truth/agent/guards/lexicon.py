@@ -8,7 +8,8 @@ with it.
 A claim is a statement that an action was completed:
 
 - ``booked``: "you're booked", "you're all set", "I've scheduled it", "your call is confirmed", "see you
-  Tuesday", "the invite is on its way", "looking forward to our call";
+  Tuesday", "the invite is on its way", "looking forward to our call", "I've got you down for Tuesday",
+  "you're penciled in", "you're on the books";
 - ``rescheduled``: "I've moved it", "your call has been rescheduled", "your call is now on Thursday";
 - ``cancelled``: "I've cancelled it", "the meeting was dropped", "your call on Tuesday is cancelled".
 
@@ -86,6 +87,12 @@ _PATTERNS: dict[ClaimKind, tuple[re.Pattern[str], ...]] = {
             r"|added (?:you|it|the|your))\b",
             _ABLE + r"(?:book|schedule|reserve|secure|lock in|set up)\b",
             r"\bbooked (?:you|it|that|this)\b",
+            r"\bgot (?:you|it|that) down\b",
+            rf"\b(?:i|we)(?:'ve| have)?\s+you\s+{_STATE}(?:booked|scheduled|confirmed|down|set up"
+            r"|locked in)\b",
+            r"\b(?:you(?:'re| are)|it(?:'s| is)|that(?:'s| is))\s+pencill?ed in\b",
+            _WE + _ACT + r"pencill?ed (?:you |it |that )?in\b",
+            r"\b(?:you(?:'re| are)|it(?:'s| is)|that(?:'s| is))\s+on the books\b",
             r"\ball set\b",
             r"\bgood to go\b",
             rf"\bsee you (?:then|there|on\b|at\b|next\b|this\b|tomorrow|today|{_WEEKDAYS})",

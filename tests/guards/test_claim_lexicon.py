@@ -40,6 +40,13 @@ def kinds(text: str) -> list[str]:
         "The booking went through.",
         "I managed to book the 3 PM slot.",
         "It should be booked now.",
+        "I've got you down for Tuesday at 3 PM.",
+        "Got you down for Tuesday at 3 PM.",
+        "You're penciled in for Tuesday at 3 PM.",
+        "I've pencilled you in for Tuesday at 3 PM.",
+        "You're on the books for Tuesday at 3 PM.",
+        "I have you scheduled for Tuesday at 3 PM.",
+        "I have you booked for Tuesday at 3 PM.",
     ],
 )
 def test_booking_claims(text: str) -> None:
