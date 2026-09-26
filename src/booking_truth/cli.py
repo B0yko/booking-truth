@@ -9,6 +9,7 @@ import typer
 
 from booking_truth import __version__
 from booking_truth.agent.cli import app as agent_app
+from booking_truth.doctor import register as register_doctor_command
 from booking_truth.harness.cli_test import register as register_test_commands
 from booking_truth.harness.evals.cli import register as register_eval_commands
 from booking_truth.harness.scenarios_cli import app as scenarios_app
@@ -28,6 +29,7 @@ app.add_typer(agent_app, name="agent", help="Run the guarded booking agent and i
 app.add_typer(scenarios_app, name="scenarios", help="List and lint scenario suites.")
 register_test_commands(app)
 register_eval_commands(app)
+register_doctor_command(app)
 
 
 def _version_callback(value: bool) -> None:
