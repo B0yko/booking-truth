@@ -1,0 +1,27 @@
+{
+  "name": "booking-truth-widget",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lint, type-check and unit-test tooling for the embeddable booking widget (widget/widget.js).",
+  "license": "Apache-2.0",
+  "author": "Andrii Boiko",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/B0yko/booking-truth.git"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "lint": "eslint widget tests/widget eslint.config.mjs",
+    "typecheck": "tsc --noEmit --allowJs --checkJs -p widget/tsconfig.json",
+    "test": "node --test \"tests/widget/*.test.mjs\"",
+    "check": "npm run lint && npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.11.0",
+    "globals": "17.12.0",
+    "typescript": "7.0.2"
+  }
+}
