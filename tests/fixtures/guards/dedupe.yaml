@@ -1,0 +1,53 @@
+# The confirming pick (a select_slot action) is delivered twice, 50-200 ms apart, with the same message
+# id, the way a flaky proxy or a retried webhook delivery would resend it. With the guard the second
+# delivery is never run again: it gets back the exact response the first one already computed, so the two
+# replies the prospect's two connections receive are byte-identical and only one calendar write happens.
+# Without it the second delivery re-runs the whole turn: idempotency and lead_lock (both still on here)
+# keep it from producing a second booking, but it is genuine extra work with its own guard events, so the
+# two replies are no longer the same response repeated — the guard's own, narrower promise, independent of
+# what those other guards happen to also catch.
+guard: dedupe
+title: A duplicated delivery of the confirming pick is answered once, not run twice
+scenario:
+  id: dedupe-duplicate-delivery
+  title: Book with a duplicate delivery of the confirming message
+  tags: [fault]
+  harness_fault: {type: duplicate_delivery}
+  persona:
+    given_name: Marco
+    initial: J
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    timezone_hint: null
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "11:00"
+      end: "15:00"
+    correction: "Could we do {{window.dates_text}}, between 11 am and 3 pm New York time?"
+    script:
+      - say: "Hi, I'd like to book a quick intro call in the next few days, around midday. I'm in New York."
+      - say: "Eastern time, New York."
+        when: agent_asks_timezone
+      - pick: in_window
+      - say: "Yes, please book it."
+        when: agent_asks_confirmation
+      - say: "Thanks."
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - duplicate_responses_identical: true
+    - active_bookings: {eq: 1}
+expect_off:
+  outcome: pass
+  assert:
+    - active_bookings: {eq: 1}
+  assert_not:
+    - duplicate_responses_identical: true

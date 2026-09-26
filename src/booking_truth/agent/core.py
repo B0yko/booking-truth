@@ -260,16 +260,37 @@ class AgentCore:
 
     async def _hook_dedupe_begin(self, req: ChatRequest) -> dict[str, Any] | None:
         """Hook for ``dedupe``: claim ``(session_id, message_id)``; return the stored response of a repeat
-        (waiting for an in-flight twin). ``None``: run the turn."""
+        (waiting for an in-flight twin). ``None``: run the turn.
+
+        A twin still in flight is waited for (:meth:`~booking_truth.store.repos.MessagesRepo.await_done`,
+        up to 30 s, polling every 50 ms); if it never finishes — it failed and discarded its row, or the
+        wait timed out — the row is claimed again, which runs the turn fresh rather than waiting forever.
+        The stored response is returned exactly as it was written, so every repeat of a message gets a
+        byte-identical reply, in and out of an in-flight race, with no separate guard event: there is
+        nothing to add to a reply that already is what it was the first time."""
+        if not self.on("dedupe"):
+            return None
+        messages = self.store.messages
+        claim = messages.claim_pending(req.session_id, req.message_id)
+        if claim == "pending":
+            stored = await messages.await_done(req.session_id, req.message_id)
+            if stored is not None:
+                return stored
+            claim = messages.claim_pending(req.session_id, req.message_id)
+        if claim == "done":
+            row = messages.get(req.session_id, req.message_id)
+            return row.response if row is not None else None
         return None
 
     async def _hook_dedupe_finish(self, req: ChatRequest, body: dict[str, Any]) -> None:
         """Hook for ``dedupe``: store the response for repeats of this message."""
-        return None
+        if self.on("dedupe"):
+            self.store.messages.complete(req.session_id, req.message_id, body)
 
     async def _hook_dedupe_abort(self, req: ChatRequest) -> None:
         """Hook for ``dedupe``: drop the pending row of a turn that failed, so a retry runs again."""
-        return None
+        if self.on("dedupe"):
+            self.store.messages.discard(req.session_id, req.message_id)
 
     @asynccontextmanager
     async def _hook_lead_lock(self, email: str) -> AsyncIterator[None]:
