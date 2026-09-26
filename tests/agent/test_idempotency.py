@@ -7,14 +7,17 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from agent_env import LEAD, AgentEnv, executor, guarded_slots, make_env
 from fastapi import FastAPI
 
 from booking_truth.agent.guards import all_except, guards_string
-from booking_truth.agent.guards.idempotency import change_idem_key, create_idem_key
+from booking_truth.agent.guards.idempotency import change_idem_key, create_idem_key, verify_landed
 from booking_truth.agent.tools import ToolExecutor
+from booking_truth.calendars.base import BookingRecord, ListResult, ReadResult, SlotsResult, WriteResult
+from booking_truth.calendars.google import encode_event_id
 from booking_truth.sandbox.state import SandboxState
 from booking_truth.serve import BackgroundServer
 from booking_truth.store import normalize_email
@@ -60,6 +63,79 @@ def test_a_reschedule_and_a_cancel_key_differ_for_the_same_booking() -> None:
     assert cancel == change_idem_key("uid-1", "cancel", None)
     assert reschedule != change_idem_key("uid-2", "reschedule", MON_1000)
     assert reschedule != change_idem_key("uid-1", "reschedule", MON_1000 + timedelta(minutes=30))
+
+
+# verify_landed's own tie-break, for a calendar whose idem_key is not the raw key ---------------------------
+
+
+class _FakeGoogleCalendar:
+    """Just enough of ``CalendarAdapter`` for :func:`verify_landed`'s ``create``/``reschedule`` branch,
+    which only ever calls ``list_bookings``: a fixed list of bookings to return from it, ``kind`` set to
+    ``"google"`` so the caller under test takes the Google branch of any key comparison."""
+
+    kind: Literal["calcom", "google"] = "google"
+    event_key = EVENT_KEY
+
+    def __init__(self, records: list[BookingRecord]) -> None:
+        self._records = records
+
+    async def find_slots(self, start: datetime, end: datetime) -> SlotsResult:
+        raise NotImplementedError
+
+    async def create_booking(
+        self, *, start: datetime, lead_email: str, lead_name: str, lead_zone: str, idem_key: str | None
+    ) -> WriteResult:
+        raise NotImplementedError
+
+    async def get_booking(self, ref: str) -> ReadResult:
+        raise NotImplementedError
+
+    async def list_bookings(self, *, lead_email: str, start: datetime, end: datetime) -> ListResult:
+        return tuple(r for r in self._records if r.lead_email == lead_email and start <= r.start <= end)
+
+    async def reschedule(
+        self, *, ref: str, new_start: datetime, idem_key: str | None, reason: str
+    ) -> WriteResult:
+        raise NotImplementedError
+
+    async def cancel(self, *, ref: str, reason: str, idem_key: str | None) -> WriteResult:
+        raise NotImplementedError
+
+    async def aclose(self) -> None:
+        return None
+
+
+async def test_verify_landed_picks_the_booking_this_key_actually_produced() -> None:
+    """Google's insert does no conflict checking, so two active bookings for the same lead can coincide at
+    the exact same start: this adapter's own pre-dispatch check only ever guards against its own prior
+    attempts, never a genuinely concurrent write from outside it. ``verify_landed``'s own comment says it
+    prefers ``a candidate whose idempotency key matches`` for exactly this case — it must adopt the booking
+    this key actually produced, not merely the first one a listing happens to return."""
+    key = create_idem_key(LEAD, EVENT_KEY, MON_1000, 0)
+    genuine_ref = encode_event_id(key)
+    end = MON_1000 + timedelta(minutes=30)
+    decoy = BookingRecord(
+        ref="decoy-event-ref",
+        start=MON_1000,
+        end=end,
+        status="active",
+        lead_email=LEAD,
+        idem_key="decoy-event-ref",
+        raw={},
+    )
+    genuine = BookingRecord(
+        ref=genuine_ref,
+        start=MON_1000,
+        end=end,
+        status="active",
+        lead_email=LEAD,
+        idem_key=genuine_ref,
+        raw={},
+    )
+    calendar = _FakeGoogleCalendar([decoy, genuine])  # the decoy is listed first
+    landed = await verify_landed(calendar, "create", lead_email=LEAD, key=key, start=MON_1000, ref=None)
+    assert landed is not None
+    assert landed.booking.ref == genuine_ref
 
 
 # Keys sent to the calendar ----------------------------------------------------------------------------------

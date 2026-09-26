@@ -41,6 +41,7 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 from booking_truth.calendars.base import BookingRecord, CalendarAdapter, Unavailable, WriteOk
+from booking_truth.calendars.google import encode_event_id
 from booking_truth.store import normalize_email
 from booking_truth.timeutil import iso_z
 
@@ -88,8 +89,13 @@ async def verify_landed(
 
     ``cancel``: ``ref`` read back and found cancelled. ``create`` / ``reschedule``: an active booking of
     the lead starting exactly at ``start``, listed from ``margin_s`` before it, preferring one whose own
-    idempotency key matches ``key`` (two attempts could in principle land in the same minute); ``None``
-    when nothing matches or the calendar cannot be read right now.
+    idempotency key matches ``key`` (two attempts could in principle land in the same minute — Google's
+    insert does no conflict checking, so a genuinely concurrent write from outside this adapter can land at
+    the same start too); ``None`` when nothing matches or the calendar cannot be read right now.
+
+    A candidate's own ``idem_key`` is ``metadata.bt_idem`` on Cal.com, the same value ``key`` is, but the
+    Google event id on Google (:mod:`booking_truth.calendars.google` has no separate metadata slot it reads
+    back), so a match there is looked for against ``encode_event_id(key)`` instead of ``key`` itself.
     """
     if kind == "cancel":
         if not ref:
@@ -109,7 +115,8 @@ async def verify_landed(
     candidates = [b for b in found_list if b.active and b.start == start]
     if not candidates:
         return None
-    matched = next((b for b in candidates if b.idem_key == key), candidates[0])
+    wanted = encode_event_id(key) if calendar.kind == "google" else key
+    matched = next((b for b in candidates if b.idem_key == wanted), candidates[0])
     return WriteOk(matched, previous_ref=ref if kind == "reschedule" else None)
 
 
