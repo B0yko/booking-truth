@@ -25,6 +25,9 @@ ASK = "Hi, I'm in New York. Can I book an intro call next week, ideally in the a
 # Monday 5 October 2026, 10:00 in New York.
 MON_1000 = datetime(2026, 10, 5, 14, 0, tzinfo=UTC)
 WITHOUT = guards_string(all_except("crm_outbox"))
+#: ``crm_outbox`` on, ``claim_ledger`` off: ``agent.guards.REQUIRES`` only ties ``rendered_confirmation`` to
+#: ``claim_ledger``, so this combination must still queue a write (as ``trusted``, since there is no ledger).
+CRM_OUTBOX_ONLY = guards_string(frozenset({"slot_ids", "crm_outbox"}))
 
 
 def slot_replies(data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -48,6 +51,12 @@ def short_readback(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 async def without_crm_outbox(sandbox: Sandbox, tmp_path: Path) -> AsyncIterator[AgentEnv]:
     async for env in make_env(sandbox, tmp_path, guards=WITHOUT):
+        yield env
+
+
+@pytest.fixture
+async def crm_outbox_only(sandbox: Sandbox, tmp_path: Path) -> AsyncIterator[AgentEnv]:
+    async for env in make_env(sandbox, tmp_path, guards=CRM_OUTBOX_ONLY):
         yield env
 
 
@@ -125,6 +134,23 @@ async def test_an_unverified_write_is_never_queued(guarded: AgentEnv, short_read
 
 
 # Guard off: the naive prose rule is the only path to the CRM -----------------------------------------------
+
+
+async def test_crm_outbox_queues_a_trusted_write_when_claim_ledger_is_off(
+    crm_outbox_only: AgentEnv,
+) -> None:
+    """``crm_outbox`` is independent of ``claim_ledger`` (``agent.guards.REQUIRES`` ties only
+    ``rendered_confirmation`` to it): with ``claim_ledger`` off a write is only ``trusted``, never
+    ``verified``, and the guard must still queue it from the write itself, not silently drop it."""
+    offer = await crm_outbox_only.say(ASK)
+    booked = await crm_outbox_only.act(slot_replies(offer)[0]["action"])
+    assert booked["booking"] is not None
+    [item] = crm_outbox_only.deps.store.outbox.items()
+    assert (item.kind, item.status, item.lead_email) == ("crm_sync", "pending", LEAD)
+    assert item.payload["action"] == "booked"
+    assert item.payload["booking_ref"] == booked["booking"]["ref"]
+    assert item.payload["zone"] == booked["booking"]["zone"]
+    assert item.payload["start_utc"] == booked["booking"]["start_utc"]
 
 
 async def test_with_the_guard_off_the_naive_prose_rule_writes_directly(

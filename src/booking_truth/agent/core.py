@@ -544,43 +544,59 @@ class AgentCore:
             result.set_final(f"{result.reply}\n\n{render.NEXT_STEP_HANDOFF}", result.claims)
 
     async def _hook_crm_outbox(self, ctx: TurnContext) -> None:
-        """Hook for ``crm_outbox``: queue a validated CRM payload for each verified write of the turn,
-        built from its ledger entry, never from the model's reply text. The HubSpot adapter and the
-        worker that drains this queue land in a later milestone; this hook only writes the outbox row.
+        """Hook for ``crm_outbox``: queue a validated CRM payload for each write of the turn that the
+        calendar confirmed, never from the model's reply text. The HubSpot adapter and the worker that
+        drains this queue land in a later milestone; this hook only writes the outbox row.
 
-        A write with no verified ledger entry (``claim_ledger`` never confirmed it, or is off) is
-        skipped: nothing reaches the CRM through this hook without a verified calendar result. The
-        payload is validated again by :meth:`~booking_truth.store.repos.OutboxRepo.enqueue`, so a bad
-        one is refused rather than queued; that should not happen from ledgered data, and a guard event
-        marks it if it ever does. This runs after the turn's response is already built (design-agent.md
-        SSB.12), so — like the naive rule's own CRM calls — each queued item gets its own trace step
-        instead of a guard event on this turn's reply."""
+        Independent of ``claim_ledger`` (``agent.guards.REQUIRES`` ties only ``rendered_confirmation`` to
+        it): a ``verified`` write's fields come from its read-back ledger entry, and a ``trusted`` write
+        (``claim_ledger`` off, so there is no ledger row) is queued straight from the write itself, which
+        already carries what the calendar returned. Only an ``unverified`` write (its read-back failed) is
+        skipped: nothing reaches the CRM through this hook without a calendar-confirmed result. The
+        payload is validated again by :meth:`~booking_truth.store.repos.OutboxRepo.enqueue`, so a bad one
+        is refused rather than queued; that should not happen from this data, and a guard event marks it
+        if it ever does. This runs after the turn's response is already built (design-agent.md SSB.12),
+        so — like the naive rule's own CRM calls — each queued item gets its own trace step instead of a
+        guard event on this turn's reply."""
         steps: list[dict[str, Any]] = []
         for write in ctx.state.writes:
-            if write.status != "verified":
+            fields = self._crm_fields(ctx, write)
+            if fields is None:
                 continue
-            entry = self._ledger_entry(ctx, write)
-            if entry is None:
-                continue
+            booking_ref, start_utc, end_utc, zone = fields
             try:
                 payload = CrmSyncPayload(
                     action=write.action,
                     lead_email=ctx.lead_email,
                     lead_name=ctx.lead_name,
-                    booking_ref=entry.booking_ref,
+                    booking_ref=booking_ref,
                     previous_ref=write.previous_ref if write.action == "rescheduled" else None,
-                    zone=valid_zone(entry.zone) or write.zone,
-                    start_utc=entry.start_utc,
-                    end_utc=entry.end_utc,
+                    zone=zone,
+                    start_utc=start_utc,
+                    end_utc=end_utc,
                 )
             except ValidationError as exc:
-                ctx.state.event("crm_outbox", "invalid_payload", f"{write.action} {entry.booking_ref}: {exc}")
+                ctx.state.event("crm_outbox", "invalid_payload", f"{write.action} {booking_ref}: {exc}")
                 continue
             item = self.store.outbox.enqueue(ctx.lead_email, "crm_sync", payload)
-            ctx.state.event("crm_outbox", "enqueued", f"{write.action} {entry.booking_ref}")
+            ctx.state.event("crm_outbox", "enqueued", f"{write.action} {booking_ref}")
             steps += self._outbox_step(item, payload)
         if steps:
             self.store.trace_steps.extend(ctx.session_id, steps)
+
+    def _crm_fields(self, ctx: TurnContext, write: WriteRecord) -> tuple[str, datetime, datetime, str] | None:
+        """``(booking_ref, start_utc, end_utc, zone)`` for ``crm_outbox`` to sync ``write``, or ``None``
+        when it is not a calendar-confirmed result yet. A ``verified`` write is read from its ledger
+        entry (``None`` if that row is somehow missing: defensive, since a verified write always writes
+        one); a ``trusted`` write (no ledger, ``claim_ledger`` off) is read from the write itself."""
+        if write.status == "verified":
+            entry = self._ledger_entry(ctx, write)
+            if entry is None:
+                return None
+            return entry.booking_ref, entry.start_utc, entry.end_utc, valid_zone(entry.zone) or write.zone
+        if write.status == "trusted":
+            return write.booking.ref, write.booking.start, write.booking.end, write.zone
+        return None
 
     def _outbox_step(self, item: OutboxItem, payload: CrmSyncPayload) -> list[dict[str, Any]]:
         ts = iso_ms_z(self.deps.clock.now())
