@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="3">
+<title>booking-truth sandbox</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1f23; --muted: #6a6f78; --line: #e2e3e0;
+    --booking: #1f6feb; --busy: #8a8f98; --event: #1a7f37; --bad: #cf222e; --warn: #9a6700;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171a; --panel: #1d2024; --ink: #e8e9eb; --muted: #9aa0a8; --line: #2e3238;
+      --booking: #58a6ff; --busy: #8b949e; --event: #3fb950; --bad: #ff7b72; --warn: #d29922;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin-bottom: 12px; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 15px; margin: 20px 0 8px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .day { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  .day h3 { font-size: 13px; margin: 0 0 6px; }
+  .item { border-left: 3px solid var(--busy); padding: 3px 0 3px 8px; margin: 4px 0; overflow-wrap: anywhere; }
+  .item.booking { border-color: var(--booking); }
+  .item.event { border-color: var(--event); }
+  .item.cancelled { opacity: .55; text-decoration: line-through; }
+  .empty { color: var(--muted); font-style: italic; }
+  .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-weight: 600; font-size: 12px; color: var(--muted); }
+  .status-4, .status-5 { color: var(--bad); }
+  .fault { color: var(--warn); }
+  .pill { display: inline-block; padding: 0 6px; border-radius: 10px; border: 1px solid var(--line); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>booking-truth sandbox</h1>
+  <span class="muted">now {{ now_local }} &middot; <span class="mono">{{ now_utc }}</span></span>
+  <span class="muted">host {{ seed.host_timezone }}, {{ seed.work_hours }}, {{ seed.event_length_minutes }} min,
+    event type {{ seed.event_type_id }}</span>
+</header>
+
+<h2>Host calendar: next {{ days|length }} business days</h2>
+<div class="grid">
+{% for label, items in days %}
+  <section class="day">
+    <h3>{{ label }}</h3>
+    {% for item in items %}
+    <div class="item {{ item.kind }} {{ item.status }}">
+      <div><strong>{{ item.local }}</strong> <span class="muted mono">{{ item.utc }}</span></div>
+      {% if item.kind == "booking" %}
+      <div>{{ item.who }} <span class="pill">{{ item.status }}</span></div>
+      <div class="muted mono">ref {{ item.ref }}</div>
+      {% elif item.kind == "event" %}
+      <div>{{ item.title }} <span class="pill">{{ item.status }}</span></div>
+      <div class="muted">{{ item.who }}</div>
+      <div class="muted mono">id {{ item.ref }}</div>
+      {% else %}
+      <div class="muted">{{ item.title }}{% if item.who %} &middot; {{ item.who }}{% endif %}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty">free</div>
+    {% endfor %}
+  </section>
+{% endfor %}
+</div>
+
+{% if others %}
+<h2>Other bookings</h2>
+<div class="table-wrap"><table>
+  <tr><th>Start (UTC)</th><th>Host time</th><th>Attendee</th><th>Status</th><th>Reference</th></tr>
+  {% for item in others %}
+  <tr><td class="mono">{{ item.start.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ item.local }}</td>
+      <td>{{ item.who }}</td><td>{{ item.status }}</td><td class="mono">{{ item.ref }}</td></tr>
+  {% endfor %}
+</table></div>
+{% endif %}
+
+<h2>HubSpot</h2>
+<div class="table-wrap"><table>
+  <tr><th>Contact</th><th>Email</th><th>First name</th><th>Last name</th></tr>
+  {% for row in contacts %}
+  <tr><td class="mono">{{ row.id }}</td><td>{{ row.email }}</td><td>{{ row.firstname }}</td><td>{{ row.lastname }}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="empty">no contacts</td></tr>
+  {% endfor %}
+</table></div>
+<div class="table-wrap" style="margin-top: 8px"><table>
+  <tr><th>Meeting</th><th>Title</th><th>Start</th><th>End</th></tr>
+  {% for row in meetings %}
+  <tr><td class="mono">{{ row.id }}</td><td>{{ row.hs_meeting_title }}</td>
+      <td class="mono">{{ row.hs_meeting_start_time }}</td><td class="mono">{{ row.hs_meeting_end_time }}</td></tr>
+  {% else %}
+  <tr><td colspan="4" class="empty">no meetings</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Active faults</h2>
+<div class="table-wrap"><table>
+  <tr><th>Group</th><th>Mode</th><th>After calls</th><th>Times</th><th>Matched</th><th>Fired</th></tr>
+  {% for rule in faults %}
+  <tr class="fault"><td class="mono">{{ rule.group }}</td><td>{{ rule.mode }}</td><td>{{ rule.after_calls }}</td>
+      <td>{{ "persistent" if rule.times is none else rule.times }}</td><td>{{ rule.matched }}</td><td>{{ rule.fired }}</td></tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">none</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Request log <span class="muted">(last {{ log|length }} of {{ log_total }}, newest first)</span></h2>
+<div class="table-wrap"><table>
+  <tr><th>#</th><th>Request</th><th>Status</th><th>Fault</th><th>Group</th><th>Time (UTC)</th></tr>
+  {% for entry in log %}
+  <tr><td class="mono">{{ entry.seq }}</td><td class="mono">{{ entry.method }} {{ entry.path }}</td>
+      <td class="mono status-{{ (entry.status // 100) if entry.completed else 0 }}">{{ entry.status if entry.completed else "pending" }}</td>
+      <td class="fault">{{ entry.fault or "" }}</td><td class="mono">{{ entry.group }}</td>
+      <td class="mono">{{ entry.ts }}</td></tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">no requests yet</td></tr>
+  {% endfor %}
+</table></div>
+</body>
+</html>

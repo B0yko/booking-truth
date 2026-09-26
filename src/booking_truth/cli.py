@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from booking_truth import __version__
+from booking_truth.sandbox.cli import app as sandbox_app
 from booking_truth.trace.validate import iter_jsonl, trace_errors
 
 app = typer.Typer(
@@ -16,6 +17,9 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
 )
+
+
+app.add_typer(sandbox_app, name="sandbox", help="Run the sandbox calendar and CRM service.")
 
 
 def _version_callback(value: bool) -> None:
