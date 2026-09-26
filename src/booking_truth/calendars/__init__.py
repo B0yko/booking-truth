@@ -17,12 +17,14 @@ from booking_truth.calendars.base import (
 )
 from booking_truth.calendars.calcom import CalcomAdapter
 from booking_truth.calendars.factory import CalendarOptions, build_calendar, calendar_options
+from booking_truth.calendars.google import GoogleAdapter, load_service_account
 
 __all__ = [
     "BookingRecord",
     "CalcomAdapter",
     "CalendarAdapter",
     "CalendarOptions",
+    "GoogleAdapter",
     "ListResult",
     "NotFound",
     "ReadResult",
@@ -36,4 +38,5 @@ __all__ = [
     "WriteUnknown",
     "build_calendar",
     "calendar_options",
+    "load_service_account",
 ]

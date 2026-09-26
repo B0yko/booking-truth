@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI
 
 from booking_truth.calendars.calcom import CalcomAdapter
+from booking_truth.calendars.google import GoogleAdapter
 from booking_truth.sandbox.app import create_sandbox_app
 from booking_truth.sandbox.state import SandboxState
 from booking_truth.serve import BackgroundServer
@@ -21,6 +22,7 @@ from booking_truth.timeutil import FixedClock
 sys.path.insert(0, str(Path(__file__).parent))
 
 from calendar_env import NOW, TOKEN, CalEnv
+from google_env import google_adapter
 
 
 @pytest.fixture(autouse=True)
@@ -53,4 +55,11 @@ def env(sandbox_server: tuple[FastAPI, BackgroundServer]) -> Iterator[CalEnv]:
 async def calcom(env: CalEnv) -> AsyncIterator[CalcomAdapter]:
     """A strict adapter (the guarded configuration) with a generous timeout."""
     async with env.adapter() as adapter:
+        yield adapter
+
+
+@pytest.fixture
+async def google(env: CalEnv) -> AsyncIterator[GoogleAdapter]:
+    """A strict Google adapter (the guarded configuration), pointed at the same sandbox server."""
+    async with google_adapter(env) as adapter:
         yield adapter

@@ -10,7 +10,15 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from fixture_runner import Mode, describe, failures, fixture_files, load_fixture, run_fixture
+from fixture_runner import (
+    Mode,
+    describe,
+    failures,
+    fixture_files,
+    load_fixture,
+    resolved_calendars,
+    run_fixture,
+)
 
 FIXTURES = fixture_files()
 
@@ -23,11 +31,10 @@ def test_there_are_guard_fixtures() -> None:
 @pytest.mark.parametrize("path", FIXTURES, ids=lambda p: p.stem)
 async def test_guard_fixture(path: Path, mode: Mode) -> None:
     fixture = load_fixture(path)
-    if fixture.calendar == "google":
-        pytest.skip("the Google Calendar adapter is not part of this build yet")
     if fixture.guard == "crm_outbox":
         pytest.skip("the HubSpot adapter and the outbox delivery worker are not part of this build yet")
     expectation = fixture.expect_on if mode == "on" else fixture.expect_off
-    observation = await run_fixture(fixture, mode)
-    problems = failures(expectation, observation)
-    assert not problems, f"{path.name} ({mode}): {problems}\n{describe(observation)}"
+    for calendar in resolved_calendars(fixture):
+        observation = await run_fixture(fixture, mode, calendar)
+        problems = failures(expectation, observation)
+        assert not problems, f"{path.name} ({mode}, {calendar}): {problems}\n{describe(observation)}"

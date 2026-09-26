@@ -8,6 +8,11 @@ scenario:
   id: idempotency-commit-then-timeout
   title: Book when booking create commits and then times out
   tags: [fault]
+  # On Google, a service account is refused the moment it sends an attendee unless the calendar allows it;
+  # without this, the very first insert of a trial (which still tries the lead as an attendee) would be
+  # rejected before it ever reaches the fault, so "commit" would not actually commit anything and this
+  # fixture would end up testing the unrelated attendee retry instead of idempotency.
+  seed: {google_sa_can_invite: true}
   faults:
     - {group: bookings.create, mode: commit_then_timeout, times: 1}
   persona:
@@ -46,9 +51,15 @@ expect_on:
     - reply_matches: "didn't accept that"
     - guard_event: {guard: claim_ledger, event: unverified}
 expect_off:
-  outcome: unclaimed_booking
+  # The naive retry resends the exact same request with no id or key. Cal.com itself rejects a create for
+  # an already-booked time, so the resend is refused and the prospect is told nothing is booked
+  # (unclaimed_booking, one active booking: the original commit). Google's insert does no conflict check
+  # at all, so the resend lands as a second event the agent's own claim ledger verifies normally
+  # (double_booking, two active bookings) — the design notes this split explicitly. Either reading is the
+  # same real integrity violation: a write whose outcome was unknown after a timeout was repeated instead
+  # of adopted.
+  outcome_in: [unclaimed_booking, double_booking]
   assert:
-    - active_bookings: {eq: 1}
-    - reply_matches: "that time was just taken by someone else, so nothing is booked yet"
+    - active_bookings: {gte: 1}
   assert_not:
     - guard_event: {guard: idempotency, event: adopted}

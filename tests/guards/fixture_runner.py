@@ -43,6 +43,7 @@ from booking_truth.agent.scripted import MISBEHAVIOURS, FakeLLM
 from booking_truth.config import Settings
 from booking_truth.harness.adapters import BundledAgentClient, BundledEndpoints
 from booking_truth.harness.builtin import BuiltinUnavailable, start_builtin_agent
+from booking_truth.harness.grading import CalendarKind
 from booking_truth.harness.runner import AgentUnderTest, Attempt, Endpoint, RunConfig, run_single
 from booking_truth.harness.scenarios import Scenario
 from booking_truth.sandbox.app import create_sandbox_app
@@ -107,7 +108,7 @@ class GuardFixture(BaseModel):
 
     guard: str
     title: str = Field(min_length=1)
-    calendar: Literal["calcom", "google", "both"] = "calcom"
+    calendar: Literal["calcom", "google", "both"] = "both"
     misbehaviours: list[str] = Field(default_factory=list)
     settings: dict[str, Any] = Field(default_factory=dict)
     grade_crm: bool = False
@@ -136,6 +137,11 @@ def fixture_files(directory: Path = FIXTURES_DIR) -> list[Path]:
     return sorted(directory.glob("*.yaml")) if directory.is_dir() else []
 
 
+def resolved_calendars(fixture: GuardFixture) -> tuple[CalendarKind, ...]:
+    """The calendar shape(s) ``fixture`` runs on: both, unless it names one specifically."""
+    return ("calcom", "google") if fixture.calendar == "both" else (fixture.calendar,)
+
+
 # Running ---------------------------------------------------------------------------------------------------
 
 
@@ -144,6 +150,7 @@ class Observation:
     """What one run showed: the grade and the agent's own state."""
 
     mode: Mode
+    calendar: CalendarKind = "calcom"
     config_error: str | None = None
     outcome: str | None = None
     attempt: Attempt | None = None
@@ -159,8 +166,11 @@ def configured_guards(fixture: GuardFixture, mode: Mode) -> str:
     return "all" if mode == "on" else guards_string(all_except(fixture.guard))
 
 
-async def run_fixture(fixture: GuardFixture, mode: Mode) -> Observation:
-    """Run the fixture's scenario once with the guard on (every guard) or off (every guard but it)."""
+async def run_fixture(fixture: GuardFixture, mode: Mode, calendar: CalendarKind = "calcom") -> Observation:
+    """Run the fixture's scenario once with the guard on (every guard) or off (every guard but it), on
+    ``calendar``. The scenario's own fault groups are Cal.com-shaped; the sandbox client that seeds them
+    (:mod:`booking_truth.harness.sandbox_client`) gives every rule its Google twin, so one fixture serves
+    both calendars unchanged."""
     token = secrets.token_urlsafe(12)
     sandbox = BackgroundServer(create_sandbox_app(token)).start()
     llm = FakeLLM(fixture.misbehaviours)
@@ -181,19 +191,20 @@ async def run_fixture(fixture: GuardFixture, mode: Mode) -> Observation:
                 factory=factory,
                 guards=configured_guards(fixture, mode),
                 llm=llm,
+                calendar=calendar,
             )
         except BuiltinUnavailable as exc:
-            return Observation(mode=mode, config_error=str(exc))
+            return Observation(mode=mode, calendar=calendar, config_error=str(exc))
         try:
             endpoint = Endpoint(
-                name=f"{fixture.guard}-{mode}",
+                name=f"{fixture.guard}-{mode}-{calendar}",
                 sandbox_url=sandbox.url,
                 make_client=lambda: BundledAgentClient(agent.url, api_key=agent.api_key),
                 side=BundledEndpoints(agent.url, agent.api_key),
-                calendar="calcom",
+                calendar=calendar,
             )
             under_test = AgentUnderTest(
-                label=f"{fixture.guard}-{mode}",
+                label=f"{fixture.guard}-{mode}-{calendar}",
                 endpoints=[endpoint],
                 kind="builtin",
                 target="builtin",
@@ -211,7 +222,11 @@ async def run_fixture(fixture: GuardFixture, mode: Mode) -> Observation:
             before = llm.calls
             attempt = await run_single(under_test, fixture.scenario, config=config)
             observation = Observation(
-                mode=mode, outcome=attempt.outcome, attempt=attempt, llm_calls=llm.calls - before
+                mode=mode,
+                calendar=calendar,
+                outcome=attempt.outcome,
+                attempt=attempt,
+                llm_calls=llm.calls - before,
             )
             store: Store = apps[0].state.deps.store
             observation.handoffs = len(store.handoffs.items(limit=1000))
@@ -282,10 +297,31 @@ def _identical_duplicates(observation: Observation) -> bool:
 
 
 def _active_bookings(observation: Observation) -> int:
+    """The lead's active bookings on whichever calendar this trial actually ran on: the trace's own
+    preflight-detected kind (``state_probe`` output, ``harness.tracebuild.probe_output``) when the trial
+    produced one, else the calendar this run was configured for. Matches a real email or the
+    ``[lead_email]`` placeholder a redacted trace carries in its stead, since this module's own synthetic
+    fixture tests build state by hand with that placeholder already in place."""
+    lead = observation.lead
+    wanted = {lead, "[lead_email]"} if lead else {"[lead_email]"}
+    calendar: CalendarKind = observation.state.get("calendar") or observation.calendar
+    if calendar == "google":
+        count = 0
+        for event in observation.state.get("google_events") or []:
+            if not isinstance(event, dict):
+                continue
+            private = (event.get("extendedProperties") or {}).get("private") or {}
+            emails = {a.get("email") for a in event.get("attendees") or [] if isinstance(a, dict)}
+            emails.add(private.get("bt_lead_email"))
+            if event.get("status", "confirmed") != "cancelled" and emails & wanted:
+                count += 1
+        return count
     count = 0
     for booking in observation.state.get("calcom_bookings") or []:
-        emails = {a.get("email") for a in booking.get("attendees") or []}
-        if booking.get("status") == "accepted" and emails & {observation.lead, "[lead_email]"}:
+        if not isinstance(booking, dict):
+            continue
+        emails = {a.get("email") for a in booking.get("attendees") or [] if isinstance(a, dict)}
+        if booking.get("status") == "accepted" and emails & wanted:
             count += 1
     return count
 

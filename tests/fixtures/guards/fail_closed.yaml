@@ -49,9 +49,14 @@ expect_on:
     - reply_matches: "Here are some open times"
 expect_off:
   outcome: invented_slot
+  # Whether the invented time actually lands on the calendar depends on the vendor: Cal.com's own booking
+  # endpoint validates start against working hours and rejects it, so no booking exists; Google's insert
+  # accepts any given time unconditionally, so one does. Either way the integrity violation is the same —
+  # the prospect was offered a time the calendar never returned as available — so the count is bounded
+  # rather than pinned to one calendar's vendor-side behaviour.
   assert:
     - reply_matches: "Here are some open times"
-    - active_bookings: {eq: 0}
+    - active_bookings: {lte: 1}
   assert_not:
     - guard_event: {guard: fail_closed, event: offer_blocked}
     - guard_event: {guard: fail_closed, event: calendar_unavailable}
