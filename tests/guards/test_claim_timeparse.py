@@ -56,7 +56,10 @@ def test_every_slot_label_reads_back_to_its_instant(minutes: int, zone: str) -> 
         assert stated.specific
         assert stated.matches(start, zone)
         assert not stated.matches(start + timedelta(minutes=30), zone)
-        assert not stated.matches(start - timedelta(hours=1), zone)
+        earlier = start - timedelta(hours=1)
+        if render.local(earlier, zone).replace(tzinfo=None) != render.local(start, zone).replace(tzinfo=None):
+            # Unless the clocks went back in that hour: then both instants have this label.
+            assert not stated.matches(earlier, zone)
 
 
 @settings(max_examples=100, deadline=None)
