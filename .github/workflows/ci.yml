@@ -21,3 +21,20 @@ jobs:
       - run: uv run ruff format --check src tests scripts
       - run: uv run mypy
       - run: uv run pytest
+
+  offline-suite:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        calendar: [calcom, google]
+        mode: [guarded, naive]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: >-
+          uv run pytest tests/golden/test_offline_suite.py -m slow
+          -k "${{ matrix.calendar }} and ${{ matrix.mode }}"

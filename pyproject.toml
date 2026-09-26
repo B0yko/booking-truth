@@ -93,7 +93,7 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-q --import-mode=importlib -m 'not live and not e2e'"
+addopts = "-q --import-mode=importlib -m 'not live and not e2e and not slow'"
 markers = [
     "live: talks to a real paid or third-party service; skipped without credentials",
     "e2e: browser end-to-end tests (Playwright)",

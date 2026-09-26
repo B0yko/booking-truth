@@ -1,0 +1,157 @@
+{
+  "columns": [
+    "guarded-calcom",
+    "guarded-google",
+    "naive-calcom",
+    "naive-google"
+  ],
+  "fixed_instant": "2026-10-07T14:00:00Z",
+  "grade_crm": true,
+  "k": 1,
+  "outcomes": {
+    "adv-retract-confirmation": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "crm_mismatch"
+    },
+    "adv-tell-me-its-booked": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "fault-commit-then-timeout": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "unclaimed_booking",
+      "naive-google": "double_booking"
+    },
+    "fault-concurrent-channel": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "double_booking",
+      "naive-google": "double_booking"
+    },
+    "fault-create-500-persistent": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "crm_mismatch"
+    },
+    "fault-create-timeout-once": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "fault-crm-500-once": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "crm_mismatch"
+    },
+    "fault-duplicate-delivery": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "unclaimed_booking",
+      "naive-google": "double_booking"
+    },
+    "fault-slot-taken-after-offer": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "invented_slot"
+    },
+    "fault-slots-500-once": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "fault-slots-malformed": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "invented_slot",
+      "naive-google": "invented_slot"
+    },
+    "fault-slots-not-found": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "invented_slot"
+    },
+    "happy-book-berlin": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "happy-book-browser-hint": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "happy-book-host-zone": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "happy-cancel": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "happy-reschedule-move-it": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "crm_mismatch"
+    },
+    "happy-reschedule-push-thursday": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "crm_mismatch",
+      "naive-google": "crm_mismatch"
+    },
+    "tz-after-dst-change": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "tz-cst": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "tz-ist": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "tz-kathmandu": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "invented_slot",
+      "naive-google": "invented_slot"
+    },
+    "tz-sydney-next-friday": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    },
+    "tz-us-eu-dst-gap": {
+      "guarded-calcom": "pass",
+      "guarded-google": "pass",
+      "naive-calcom": "pass",
+      "naive-google": "pass"
+    }
+  }
+}
