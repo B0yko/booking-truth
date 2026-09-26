@@ -679,3 +679,9 @@ def test_cli_lint_fails_on_errors(tmp_path: Path) -> None:
     result = CliRunner().invoke(app, ["lint", "--as-of", "2026-09-26", "--suite", str(tmp_path)])
     assert result.exit_code == 1
     assert "lint failed for 2026-09-26: 1 error(s)" in result.output
+
+
+def test_slot_taken_after_offer_twin_targets_freebusy() -> None:
+    rule = FaultRule(id="take", group="bookings.create", mode="slot_taken_after_offer")
+    expanded = expand_faults_for_google([rule])
+    assert [(r.group, r.id) for r in expanded] == [("bookings.create", "take"), ("freebusy", "take:freebusy")]

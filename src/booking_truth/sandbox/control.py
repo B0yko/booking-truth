@@ -16,10 +16,11 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jinja2 import Environment, PackageLoader
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from booking_truth.sandbox.common import Outcome, SetupBooking, VendorApi, bearer_ok, parse_json
 from booking_truth.sandbox.faults import FaultRule
+from booking_truth.sandbox.google import LEAD_EMAIL_PROPERTY, calendar_email
 from booking_truth.sandbox.state import SandboxState, SeedConfig, check_zone
 from booking_truth.timeutil import iso_z, parse_iso
 
@@ -56,6 +57,16 @@ class SetupBookingBody(BaseModel):
     start: datetime
     title: str | None = None
     lead_timezone: str | None = None
+    #: Google only: the event id (base32hex, as an agent's idempotent insert would use) and private extended
+    #: properties added next to ``bt_lead_email``.
+    event_id: str | None = None
+    extended_properties: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def _google_only(self) -> SetupBookingBody:
+        if self.calendar != "google" and (self.event_id is not None or self.extended_properties is not None):
+            raise ValueError("event_id and extended_properties apply to the google calendar only")
+        return self
 
     @field_validator("start")
     @classmethod
@@ -163,6 +174,8 @@ async def setup_booking(request: Request) -> JSONResponse:
         start=parsed.start,
         title=parsed.title,
         lead_timezone=parsed.lead_timezone,
+        event_id=parsed.event_id,
+        extended_properties=parsed.extended_properties,
     )
     state = _state(request)
     api = next((a for a in _vendor_apis(request) if a.calendar == parsed.calendar), None)
@@ -194,7 +207,8 @@ def state_snapshot(state: SandboxState) -> dict[str, Any]:
         "google": {
             "events": [
                 copy.deepcopy(event) for events in state.google_events.values() for event in events.values()
-            ]
+            ],
+            "token_grants": copy.deepcopy(state.google_token_grants),
         },
         "hubspot": {
             "contacts": copy.deepcopy(list(state.hubspot_contacts.values())),
@@ -277,10 +291,18 @@ def _calendar_items(state: SandboxState, zone: ZoneInfo) -> list[UiItem]:
             when = event.get("start", {}).get("dateTime")
             until = event.get("end", {}).get("dateTime")
             if isinstance(when, str) and isinstance(until, str):
-                attendees = ", ".join(str(a.get("email", "")) for a in event.get("attendees", []))
                 summary, status = str(event.get("summary", "")), str(event.get("status", ""))
-                items.append(item("event", when, until, summary, attendees, status, str(event.get("id", ""))))
+                items.append(item("event", when, until, summary, _event_who(event), status, str(event["id"])))
     return sorted(items, key=lambda entry: (entry.start, entry.kind))
+
+
+def _event_who(event: dict[str, Any]) -> str:
+    """Attendee emails, or the lead email a service account keeps in a private extended property."""
+    attendees = [str(a.get("email", "")) for a in event.get("attendees", []) if isinstance(a, dict)]
+    if attendees:
+        return ", ".join(attendees)
+    private = event.get("extendedProperties", {}).get("private", {})
+    return str(private.get(LEAD_EMAIL_PROPERTY, "")) if isinstance(private, dict) else ""
 
 
 def _business_days(start: date, work_days: list[int], count: int) -> list[date]:
@@ -297,7 +319,10 @@ def _crm_rows(objects: dict[str, dict[str, Any]], fields: tuple[str, ...]) -> li
     rows = []
     for obj in objects.values():
         props = obj.get("properties", {}) if isinstance(obj.get("properties"), dict) else {}
-        rows.append({"id": str(obj.get("id", "")), **{f: str(props.get(f, "")) for f in fields}})
+        row = {"id": str(obj.get("id", "")), **{f: str(props.get(f) or "") for f in fields}}
+        contacts = obj.get("associations", {}).get("contacts", {}).get("results", [])
+        row["contacts"] = ", ".join(str(c.get("id", "")) for c in contacts if isinstance(c, dict))
+        rows.append(row)
     return rows
 
 
@@ -316,10 +341,12 @@ def ui_context(state: SandboxState) -> dict[str, Any]:
         "now_utc": iso_z(now),
         "seed": seed,
         "days": [(f"{day:%a %d %b}", by_day[day]) for day in days],
-        "others": [item for item in others if item.kind == "booking"],
+        "others": [item for item in others if item.kind in ("booking", "event")],
+        "google_calendar": calendar_email(state),
         "contacts": _crm_rows(state.hubspot_contacts, ("email", "firstname", "lastname")),
         "meetings": _crm_rows(
-            state.hubspot_meetings, ("hs_meeting_title", "hs_meeting_start_time", "hs_meeting_end_time")
+            state.hubspot_meetings,
+            ("hs_meeting_title", "hs_meeting_start_time", "hs_meeting_end_time", "hs_meeting_outcome"),
         ),
         "log": list(reversed(state.request_log[-UI_LOG_LINES:])),
         "log_total": len(state.request_log),

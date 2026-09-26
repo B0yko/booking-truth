@@ -23,8 +23,8 @@ header-selected versions and behaviour that has no public source.
 
 1. The sandbox mirrors only the operations the product's adapters use, under their real paths:
    - Cal.com API v2: slots, create, get, list by attendee email, reschedule and cancel;
-   - Google Calendar API v3: `freeBusy.query`, events insert with a client-supplied id, get, patch and delete, plus
-     a token endpoint for the service-account flow;
+   - Google Calendar API v3: `freeBusy.query`, events insert with a client-supplied id, get, patch, delete and list
+     by a private extended property, plus a token endpoint for the service-account flow;
    - HubSpot CRM v3: contact search, create and update; meeting create, update and get with a contact association.
 2. Within that subset, the sandbox follows the vendor's real behaviour, not only its documentation: paths,
    version headers, status codes, envelopes, JSON key order, validation messages and error texts. Where the
@@ -37,12 +37,15 @@ header-selected versions and behaviour that has no public source.
    time. Features outside the product's scope (teams, seats, recurring events, confirmation flows, rate limits)
    are not modelled; request fields for them are accepted and ignored rather than rejected, so adapters that send
    them still work.
-5. The sandbox requires a bearer token on every route except its read-only HTML view, even where the real API
-   is public. The control API can reset and rewrite the whole state, so it must not be open to anything that can
-   reach the port; using the same token on the vendor routes keeps configuration to one value (it is also the
-   Cal.com key and the HubSpot token the agent is given). This is recorded as a deviation. Answers that the
-   vendor gives before its own auth guards run, such as a 404 for a route that does not exist under the requested
-   API version, come before the token check here too; they reveal nothing about the sandbox's state.
+5. The sandbox requires a bearer token on every route except its read-only HTML view and Google's token endpoint
+   (below), even where the real API is public. The control API can reset and rewrite the whole state, so it must
+   not be open to anything that can reach the port; using the same token on the vendor routes keeps configuration
+   to one value (it is also the Cal.com key and the HubSpot token the agent is given). This is recorded as a
+   deviation. Answers that the vendor gives before its own auth guards run, such as a 404 for a route that does
+   not exist under the requested API version, come before the token check here too; they reveal nothing about the
+   sandbox's state. The one exception is Google's token endpoint: it takes a service-account assertion, checks
+   its structure and claims (not its signature, since the sandbox has no public key for the caller's account) and
+   issues the sandbox token, so a Google adapter's service-account flow runs unchanged.
 6. Fault modes are sandbox features. Their responses reuse the vendor's shapes, and the fidelity page states
    which texts are the sandbox's own.
 7. All vendor routers go through one pipeline (auth, request log, fault engine, lock) and are composed from a

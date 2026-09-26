@@ -1,14 +1,15 @@
 """Plumbing shared by the sandbox's vendor APIs: auth, the request log, fault application and responses.
 
-A vendor API (Cal.com today; Google Calendar and HubSpot plug in the same way) is a :class:`VendorApi`
-subclass with its own router and its own renderings of auth failures and faults. Every vendor route hands
-its request to :func:`run_call`, which runs the same pipeline for all of them:
+A vendor API (Cal.com, Google Calendar, Google's OAuth token endpoint, HubSpot) is a :class:`VendorApi`
+subclass with its own router and its own renderings of auth failures, faults and response bytes. Every
+vendor route hands its request to :func:`run_call`, which runs the same pipeline for all of them:
 
-1. read the query and body (strict JSON: ``NaN`` and ``Infinity`` make the body invalid);
+1. read the query and body (by default strict JSON: ``NaN`` and ``Infinity`` make the body invalid; a
+   vendor can parse other media types, e.g. the token endpoint's form bodies);
 2. run the route's ``route`` check, the vendor's own routing that happens before any auth guard, e.g. a
    ``cal-api-version`` that has no such route (logged, never counted by fault rules);
-3. check the bearer token (a failure is answered in the vendor's shape and logged), then run the route's
-   ``precheck`` (logged, never counted by fault rules);
+3. authorize the call, by default with the sandbox bearer token (a failure is answered in the vendor's
+   shape and logged), then run the route's ``precheck`` (logged, never counted by fault rules);
 4. append the request to the log and ask the fault engine whether a rule fires;
 5. apply the fault, or run the handler under ``state.lock``;
 6. complete the log entry with the final status and the full JSON response.
@@ -30,7 +31,7 @@ import json
 import logging
 import math
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, assert_never
@@ -50,10 +51,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Outcome:
-    """A status code and a JSON body, before it becomes an HTTP response."""
+    """A status code and a JSON body (``None`` for an empty body), before it becomes an HTTP response."""
 
     status: int
     body: Any
+    #: Extra response headers, e.g. HubSpot's ``Location`` on a create.
+    headers: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -65,6 +68,9 @@ class SetupBooking:
     start: datetime
     title: str | None = None
     lead_timezone: str | None = None
+    #: Google only: a client-supplied event id and extra private extended properties.
+    event_id: str | None = None
+    extended_properties: dict[str, str] | None = None
 
 
 @dataclass
@@ -119,6 +125,24 @@ class VendorApi:
 
     def owns(self, path: str) -> bool:
         return path == self.prefix or path.startswith(self.prefix + "/")
+
+    def parse_body(self, raw: bytes, content_type: str) -> tuple[Any, bool]:
+        """The request body as handlers see it, and whether it is invalid. Default: strict JSON."""
+        return parse_body_json(raw)
+
+    def log_view(self, value: Any) -> Any:
+        """What the request log keeps of a request or response body. Default: the body itself."""
+        return value
+
+    def authorize(self, call: Call) -> Outcome | None:
+        """``None`` when the call may proceed. Default: the sandbox bearer token."""
+        if bearer_ok(call.request):
+            return None
+        return self.unauthorized(call, token_sent="authorization" in call.request.headers)
+
+    def render(self, outcome: Outcome) -> Response:
+        """The HTTP response for an outcome. Default: compact JSON, ``application/json; charset=utf-8``."""
+        return vendor_response(outcome)
 
     def unauthorized(self, call: Call, *, token_sent: bool) -> Outcome:
         raise NotImplementedError
@@ -201,44 +225,53 @@ def parse_json(raw: bytes) -> Any:
         raise ValueError("JSON nested too deeply") from exc
 
 
-async def read_call(request: Request, group: str) -> Call:
+def parse_body_json(raw: bytes) -> tuple[Any, bool]:
+    """A strict JSON body; an invalid one is kept as text for the log."""
+    if not raw:
+        return None, False
+    try:
+        return parse_json(raw), False
+    except ValueError:
+        return raw.decode("utf-8", errors="replace"), True
+
+
+async def read_call(request: Request, group: str, api: VendorApi) -> Call:
     state: SandboxState = request.app.state.sandbox
     raw = await request.body()
-    body: Any = None
-    invalid = False
-    if raw:
-        try:
-            body = parse_json(raw)
-        except ValueError:
-            body = raw.decode("utf-8", errors="replace")
-            invalid = True
+    body, invalid = api.parse_body(raw, request.headers.get("content-type", ""))
     return Call(
         request=request, state=state, group=group, query=query_dict(request), body=body, body_invalid=invalid
     )
 
 
 def vendor_response(outcome: Outcome) -> Response:
-    return JSONResponse(outcome.body, status_code=outcome.status, media_type=JSON_UTF8)
+    return JSONResponse(
+        outcome.body, status_code=outcome.status, media_type=JSON_UTF8, headers=dict(outcome.headers)
+    )
 
 
-def _finish(entry: LogEntry, outcome: Outcome) -> None:
+def _log(call: Call, api: VendorApi) -> LogEntry:
+    return call.state.log(call.method, call.path, call.group, call.query, api.log_view(call.body))
+
+
+def _finish(entry: LogEntry, outcome: Outcome, api: VendorApi) -> None:
     entry.status = outcome.status
-    entry.response = copy.deepcopy(outcome.body)
+    entry.response = copy.deepcopy(api.log_view(outcome.body))
     entry.completed = True
 
 
-async def _log_only(call: Call, outcome: Outcome) -> Response:
+async def _log_only(call: Call, api: VendorApi, outcome: Outcome) -> Response:
     """Log a call that never reached the fault engine (auth failure, version routing, unknown route)."""
     async with call.state.lock:
-        entry = call.state.log(call.method, call.path, call.group, call.query, call.body)
-        _finish(entry, outcome)
-    return vendor_response(outcome)
+        entry = _log(call, api)
+        _finish(entry, outcome, api)
+    return api.render(outcome)
 
 
 async def log_unrouted(request: Request, api: VendorApi) -> Response:
     """Answer and log a call to an unknown path or method under ``api``'s prefix."""
-    call = await read_call(request, UNROUTED_GROUP)
-    return await _log_only(call, api.route_not_found(request, call.state.now()))
+    call = await read_call(request, UNROUTED_GROUP, api)
+    return await _log_only(call, api, api.route_not_found(request, call.state.now()))
 
 
 def _failed(call: Call, api: VendorApi) -> Outcome:
@@ -265,17 +298,17 @@ async def run_call(
     precheck: Precheck | None = None,
 ) -> Response:
     """The pipeline every vendor route runs; see the module docstring."""
-    call = await read_call(request, group)
+    call = await read_call(request, group, api)
     state = call.state
     early = _check(call, api, route)
-    if early is None and not bearer_ok(request):
-        early = api.unauthorized(call, token_sent="authorization" in request.headers)
+    if early is None:
+        early = _check(call, api, api.authorize)
     if early is None:
         early = _check(call, api, precheck)
     if early is not None:
-        return await _log_only(call, early)
+        return await _log_only(call, api, early)
     async with state.lock:
-        entry = state.log(call.method, call.path, group, call.query, call.body)
+        entry = _log(call, api)
         call.generation = state.generation
         rule = state.faults.on_call(group)
         entry.fault = rule.mode if rule is not None else None
@@ -283,8 +316,8 @@ async def run_call(
         outcome = await _apply(call, api, handler, rule)
     except Exception:
         outcome = _failed(call, api)
-    _finish(entry, outcome)
-    return vendor_response(outcome)
+    _finish(entry, outcome, api)
+    return api.render(outcome)
 
 
 async def _locked(call: Call, api: VendorApi, work: Callable[[], Outcome]) -> Outcome:

@@ -186,13 +186,65 @@ def test_setup_booking_defaults_to_the_host_zone_and_rejects_a_taken_slot(sandbo
     )
 
 
-def test_setup_booking_for_google_is_not_implemented_yet(sandbox: Sandbox) -> None:
+def test_setup_booking_for_google_uses_the_insert_path_and_is_not_logged(sandbox: Sandbox) -> None:
+    sandbox.faults({"group": "events.*", "mode": "error_500", "times": None})
+    response = setup_booking(
+        sandbox,
+        calendar="google",
+        lead_timezone="Europe/Berlin",
+        event_id="bt0setup01",
+        extended_properties={"bt_event_key": "intro-call"},
+    )
+    assert response.status_code == 201
+    event = response.json()
+    assert event["id"] == "bt0setup01"
+    assert event["status"] == "confirmed"
+    assert event["summary"] == "Intro call with Lena M"
+    assert event["description"] == "Lead: Lena M <lead@example.com>\nLead time zone: Europe/Berlin"
+    assert event["start"] == {"dateTime": "2026-10-05T09:00:00-04:00", "timeZone": "America/New_York"}
+    assert event["end"]["dateTime"] == "2026-10-05T09:30:00-04:00"
+    assert event["extendedProperties"] == {"private": {"bt_lead_email": LEAD, "bt_event_key": "intro-call"}}
+    assert "attendees" not in event  # a service account without delegation cannot invite
+    state = sandbox.snapshot()
+    assert state["google"]["events"] == [event]
+    assert state["request_log"] == []
+    assert state["faults"][0]["matched"] == 0
+    sandbox.faults()
+    path = "/calendar/v3/calendars/primary/events/bt0setup01"
+    assert sandbox.client.get(path).json() == event
+
+
+def test_setup_booking_for_google_follows_google_rules(sandbox: Sandbox) -> None:
+    assert setup_booking(sandbox, calendar="google", title="First").status_code == 201
+    overlap = setup_booking(sandbox, calendar="google", lead_email="other@example.com")
+    assert overlap.status_code == 201  # events.insert does no conflict checking
+    invalid = setup_booking(sandbox, calendar="google", event_id="not-base32hex")
+    assert invalid.status_code == 409
+    assert invalid.json()["vendor_status"] == 400
+    assert invalid.json()["vendor_response"]["error"]["message"] == "Invalid resource id value."
+    sandbox.seed(google_sa_can_invite=True)
+    invited = setup_booking(sandbox, calendar="google", start="2026-10-06T13:00:00Z").json()
+    assert invited["attendees"] == [{"email": LEAD, "displayName": "Lena M", "responseStatus": "needsAction"}]
+
+
+def test_google_only_setup_fields_are_rejected_for_cal_com(sandbox: Sandbox) -> None:
+    for extra in ({"event_id": "bt0setup01"}, {"extended_properties": {"k": "v"}}):
+        response = setup_booking(sandbox, **extra)
+        assert response.status_code == 422
+        assert response.json()["error"] == "invalid_booking"
+
+
+def test_setup_booking_for_a_calendar_this_build_does_not_mirror_is_a_501(
+    sandbox: Sandbox, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    only_calcom = tuple(api for api in sandbox.app.state.vendor_apis if api.calendar != "google")
+    monkeypatch.setattr(sandbox.app.state, "vendor_apis", only_calcom)
     response = setup_booking(sandbox, calendar="google")
     assert response.status_code == 501
     body = response.json()
     assert body["error"] == "not_implemented"
     assert "google" in body["detail"]
-    assert sandbox.snapshot()["calcom"]["bookings"] == []
+    assert sandbox.snapshot()["google"]["events"] == []
 
 
 @pytest.mark.parametrize(
@@ -228,7 +280,7 @@ def test_state_shape(sandbox: Sandbox) -> None:
     ]
     assert state["now"] == "2026-10-01T12:00:00Z"
     assert state["calcom"] == {"bookings": []}
-    assert state["google"] == {"events": []}
+    assert state["google"] == {"events": [], "token_grants": []}
     assert state["hubspot"] == {"contacts": [], "meetings": []}
     assert state["seed"]["event_type_id"] == 1001
     assert state["seed"]["host_email"].endswith("@example.com")
@@ -328,10 +380,52 @@ def test_ui_renders_calendar_crm_log_and_faults(sandbox: Sandbox) -> None:
     assert "https://" not in html
 
 
+def test_ui_shows_google_events_and_the_hubspot_tables(sandbox: Sandbox) -> None:
+    setup_booking(sandbox, calendar="google", event_id="bt0setup01", start="2026-10-06T14:00:00Z")
+    body = {"start": {"dateTime": "2026-11-02T14:00:00Z"}, "end": {"dateTime": "2026-11-02T14:30:00Z"}}
+    later = sandbox.client.post("/calendar/v3/calendars/primary/events", json=body).json()
+    sandbox.client.delete(f"/calendar/v3/calendars/primary/events/{later['id']}")
+    created = sandbox.client.post(
+        "/crm/v3/objects/contacts", json={"properties": {"email": LEAD, "firstname": "Lena", "lastname": "M"}}
+    ).json()
+    meeting = {
+        "properties": {
+            "hs_timestamp": "2026-10-06T14:00:00Z",
+            "hs_meeting_title": "Intro call",
+            "hs_meeting_start_time": "2026-10-06T14:00:00Z",
+            "hs_meeting_end_time": "2026-10-06T14:30:00Z",
+            "hs_meeting_outcome": "SCHEDULED",
+        },
+        "associations": [
+            {
+                "to": {"id": created["id"]},
+                "types": [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": 200}],
+            }
+        ],
+    }
+    meeting_id = sandbox.client.post("/crm/v3/objects/meetings", json=meeting).json()["id"]
+    html = httpx.get(f"{sandbox.url}/_ui", timeout=5.0).text
+    assert 'Google calendar <span class="mono">host@example.com</span>' in html
+    assert "Google bt0setup01" in html
+    assert "10:00–10:30 EDT" in html
+    assert "Intro call with Lena M" in html
+    assert LEAD in html  # the lead email from the private extended property
+    assert "Other bookings and events" in html
+    assert later["id"] in html
+    assert '<div class="item event cancelled">' not in html  # the tombstone lies beyond the ten days
+    assert "cancelled" in html
+    assert f'<td class="mono">{created["id"]}</td><td>{LEAD}</td><td>Lena</td><td>M</td>' in html
+    assert f'<td class="mono">{meeting_id}</td><td>Intro call</td>' in html
+    assert "SCHEDULED" in html
+    assert "no contacts" not in html
+    assert "https://" not in html
+    assert "<script" not in html.lower()
+
+
 def test_ui_escapes_vendor_data_and_lists_bookings_beyond_ten_days(sandbox: Sandbox) -> None:
     sandbox.booked("2026-11-02T14:00:00Z", name="<b>Mallory</b>", email="m@example.com")
     html = httpx.get(f"{sandbox.url}/_ui", timeout=5.0).text
-    assert "Other bookings" in html
+    assert "Other bookings and events" in html
     assert "m@example.com" in html
     assert "<b>Mallory</b>" not in html
 

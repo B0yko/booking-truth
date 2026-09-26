@@ -63,7 +63,9 @@ class SeedConfig(BaseModel):
     event_type_id: int = 1001
     event_type_slug: str = "intro-call"
     event_title: str = "Intro call"
-    google_calendar_id: str = "primary"
+    google_calendar_id: str = Field(default="primary", min_length=1)
+    #: Simulates domain-wide delegation: the service account may add attendees and send ``sub``.
+    google_sa_can_invite: bool = False
     host_id: int = 1
     host_name: str = "Sandbox Host"
     host_email: str = "host@example.com"
@@ -143,9 +145,10 @@ class SandboxState:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # Vendor-shaped objects, exactly as the vendor API returns them.
     calcom_bookings: list[dict[str, Any]] = field(default_factory=list)
-    # Google events by calendar id, then by event id.
+    # Google events by calendar id, then by event id. A deleted event stays as a ``cancelled`` tombstone.
     google_events: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
-    deleted_event_ids: dict[str, set[str]] = field(default_factory=dict)
+    # Assertions accepted by the OAuth token endpoint: issuer, subject, scopes and times.
+    google_token_grants: list[dict[str, Any]] = field(default_factory=list)
     hubspot_contacts: dict[str, dict[str, Any]] = field(default_factory=dict)
     hubspot_meetings: dict[str, dict[str, Any]] = field(default_factory=dict)
     # Busy blocks that are not vendor objects: seeded bookings and third-party takes.
@@ -166,7 +169,7 @@ class SandboxState:
         self.faults = FaultEngine()
         self.calcom_bookings.clear()
         self.google_events.clear()
-        self.deleted_event_ids.clear()
+        self.google_token_grants.clear()
         self.hubspot_contacts.clear()
         self.hubspot_meetings.clear()
         self.external_busy.clear()

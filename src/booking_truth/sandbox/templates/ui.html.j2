@@ -46,7 +46,7 @@
   <h1>booking-truth sandbox</h1>
   <span class="muted">now {{ now_local }} &middot; <span class="mono">{{ now_utc }}</span></span>
   <span class="muted">host {{ seed.host_timezone }}, {{ seed.work_hours }}, {{ seed.event_length_minutes }} min,
-    event type {{ seed.event_type_id }}</span>
+    Cal.com event type {{ seed.event_type_id }}, Google calendar <span class="mono">{{ google_calendar }}</span></span>
 </header>
 
 <h2>Host calendar: next {{ days|length }} business days</h2>
@@ -59,11 +59,11 @@
       <div><strong>{{ item.local }}</strong> <span class="muted mono">{{ item.utc }}</span></div>
       {% if item.kind == "booking" %}
       <div>{{ item.who }} <span class="pill">{{ item.status }}</span></div>
-      <div class="muted mono">ref {{ item.ref }}</div>
+      <div class="muted mono">Cal.com {{ item.ref }}</div>
       {% elif item.kind == "event" %}
       <div>{{ item.title }} <span class="pill">{{ item.status }}</span></div>
       <div class="muted">{{ item.who }}</div>
-      <div class="muted mono">id {{ item.ref }}</div>
+      <div class="muted mono">Google {{ item.ref }}</div>
       {% else %}
       <div class="muted">{{ item.title }}{% if item.who %} &middot; {{ item.who }}{% endif %}</div>
       {% endif %}
@@ -76,11 +76,12 @@
 </div>
 
 {% if others %}
-<h2>Other bookings</h2>
+<h2>Other bookings and events</h2>
 <div class="table-wrap"><table>
-  <tr><th>Start (UTC)</th><th>Host time</th><th>Attendee</th><th>Status</th><th>Reference</th></tr>
+  <tr><th>Start (UTC)</th><th>Host time</th><th>Calendar</th><th>Lead</th><th>Status</th><th>Reference</th></tr>
   {% for item in others %}
   <tr><td class="mono">{{ item.start.strftime("%Y-%m-%d %H:%M") }}</td><td>{{ item.local }}</td>
+      <td>{{ "Cal.com" if item.kind == "booking" else "Google" }}</td>
       <td>{{ item.who }}</td><td>{{ item.status }}</td><td class="mono">{{ item.ref }}</td></tr>
   {% endfor %}
 </table></div>
@@ -96,12 +97,13 @@
   {% endfor %}
 </table></div>
 <div class="table-wrap" style="margin-top: 8px"><table>
-  <tr><th>Meeting</th><th>Title</th><th>Start</th><th>End</th></tr>
+  <tr><th>Meeting</th><th>Title</th><th>Start</th><th>End</th><th>Outcome</th><th>Contacts</th></tr>
   {% for row in meetings %}
   <tr><td class="mono">{{ row.id }}</td><td>{{ row.hs_meeting_title }}</td>
-      <td class="mono">{{ row.hs_meeting_start_time }}</td><td class="mono">{{ row.hs_meeting_end_time }}</td></tr>
+      <td class="mono">{{ row.hs_meeting_start_time }}</td><td class="mono">{{ row.hs_meeting_end_time }}</td>
+      <td>{{ row.hs_meeting_outcome }}</td><td class="mono">{{ row.contacts }}</td></tr>
   {% else %}
-  <tr><td colspan="4" class="empty">no meetings</td></tr>
+  <tr><td colspan="6" class="empty">no meetings</td></tr>
   {% endfor %}
 </table></div>
 

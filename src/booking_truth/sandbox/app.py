@@ -7,13 +7,13 @@ from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from booking_truth import __version__
-from booking_truth.sandbox import calcom, control
+from booking_truth.sandbox import calcom, control, google, hubspot, oauth
 from booking_truth.sandbox.common import VendorApi, log_unrouted
 from booking_truth.sandbox.state import SandboxState
 from booking_truth.timeutil import Clock, SystemClock
 
 #: Mirrored vendor APIs, mounted in this order. Each one brings its own router and error shapes.
-VENDOR_APIS: tuple[VendorApi, ...] = (calcom.API,)
+VENDOR_APIS: tuple[VendorApi, ...] = (calcom.API, google.API, oauth.API, hubspot.API)
 
 
 def create_sandbox_app(
@@ -49,8 +49,9 @@ def create_sandbox_app(
 
 
 async def _http_error(request: Request, exc: Exception) -> Response:
-    """Unknown routes: vendor-shaped and logged under a vendor prefix (NestJS answers 404 for a wrong method
-    too), so the request log still shows an agent that calls an endpoint the sandbox does not mirror."""
+    """Unknown routes: vendor-shaped and logged under a vendor prefix (a wrong method is answered like an
+    unknown path), so the request log still shows an agent that calls an endpoint the sandbox does not
+    mirror."""
     status = int(getattr(exc, "status_code", 500))
     if status in (404, 405):
         for api in request.app.state.vendor_apis:

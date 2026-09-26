@@ -806,11 +806,19 @@ def expand_faults_for_google(rules: Iterable[FaultRule]) -> list[FaultRule]:
     that sets the status, so ``bookings.cancel`` gets a twin for each. A twin of a named rule is
     named ``<id>:<google group>``; the separator is not ``@``, so trace redaction never mistakes a
     rule id in ``/_state`` for an email address.
+
+    ``slot_taken_after_offer`` on ``bookings.create`` is the exception. Google inserts do no conflict
+    checking, so a take that happens inside the insert could not be noticed by any client. Its twin
+    targets ``freebusy`` instead: the offered slots are answered normally and then taken by a third
+    party, so a client that re-checks free/busy before inserting sees them busy.
     """
     expanded: list[FaultRule] = []
     for rule in rules:
         expanded.append(rule)
-        for group in GOOGLE_FAULT_GROUPS.get(rule.group, ()):
+        groups = GOOGLE_FAULT_GROUPS.get(rule.group, ())
+        if rule.mode == "slot_taken_after_offer" and rule.group == "bookings.create":
+            groups = ("freebusy",)
+        for group in groups:
             twin_id = None if rule.id is None else f"{rule.id}:{group}"
             expanded.append(rule.model_copy(update={"group": group, "id": twin_id}))
     return expanded
