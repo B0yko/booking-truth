@@ -53,7 +53,7 @@ async def test_guarded_booking_through_a_slot_quick_reply(guarded: AgentEnv) -> 
     assert booking["local_label"].endswith("Europe/Berlin (UTC+02:00)")
     line, sentence = booked["reply"].split("\n\n", 1)
     assert line == f"Booked: {booking['local_label']} · reference {booking['ref'][:8]}"
-    assert sentence.startswith(f"You're booked for {pick['label']} (Europe/Berlin)")
+    assert sentence == "The calendar invite is on its way to your email."
     assert booked["quick_replies"] == []
     [calendar_booking] = guarded.bookings()
     assert calendar_booking["uid"] == booking["ref"]

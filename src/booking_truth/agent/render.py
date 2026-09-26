@@ -93,6 +93,18 @@ def confirmation_line(
     raise ValueError(f"unknown booking action {action!r}")
 
 
+def confirmation_follow_up(action: str) -> str:
+    """The sentence after the confirmation line when code writes the rest of the reply. It states no time,
+    because the line above it already gives the date, time, zone and reference."""
+    if action == "booked":
+        return "The calendar invite is on its way to your email."
+    if action == "rescheduled":
+        return "The calendar invite is updated with the new time."
+    if action == "cancelled":
+        return "Nothing is booked for you now."
+    raise ValueError(f"unknown booking action {action!r}")
+
+
 def zone_statement(zone: str, instant: datetime, *, browser: bool = False) -> str:
     """The statement-back line for a resolved or hinted zone."""
     source = " based on your browser" if browser else ""

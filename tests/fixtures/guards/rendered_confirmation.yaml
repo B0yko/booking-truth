@@ -1,0 +1,59 @@
+# The booking succeeds and is verified, but the model states its time in the host's zone while naming the
+# prospect's zone ("You're booked for Tuesday 6 October, 9:00 AM (Europe/Berlin)" for a 3:00 PM Berlin call).
+# The claim check blocks that reply and its repair in both runs. With the guard the prospect still gets the
+# code-rendered confirmation line of the verified booking, so the one message about the booking is the one
+# code wrote. Without it the only safe reply left is "I haven't booked anything yet" while the booking exists.
+guard: rendered_confirmation
+title: A garbled confirmation time is replaced by the code-rendered line
+misbehaviours: [garble_confirmation_time]
+scenario:
+  id: rendered-confirmation-garbled-time
+  title: Book from Berlin while the model misstates the booked time
+  tags: [happy]
+  persona:
+    given_name: Jonas
+    initial: K
+    style: brief
+    goal: book
+    true_zone: Europe/Berlin
+    timezone_statement: "I'm in Berlin."
+    clarification: "Central European time, I'm in Berlin."
+    window:
+      # 15:00-19:00 in Berlin is 09:00-13:00 in New York for most of the year.
+      dates: {rule: next_business_days, count: 5}
+      start: "15:00"
+      end: "19:00"
+    correction: "Could we find something {{window.dates_text}}, between 3 and 7 pm Berlin time?"
+    script:
+      - say: "Hi, I'm in Berlin and would like to book an intro call, ideally late afternoon my time."
+      # Said as text, so the model (not the slot button's code path) books it and writes the confirmation.
+      - say: "{{offered[0].label}} works for me."
+        when: agent_offered_slots
+      - say: "Thanks!"
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - guard_event: {guard: claim_ledger, event: claim_blocked}
+    - guard_event: {guard: claim_ledger, event: repair_blocked}
+    - guard_event: {guard: rendered_confirmation, event: rendered}
+    - reply_matches: "^Booked: [A-Z][a-z]+day, \\d{1,2} [A-Z][a-z]+ \\d{4}, \\d{1,2}:\\d{2} [AP]M Europe/Berlin \\(UTC\\+0[12]:00\\) · reference \\w+"
+    - ledger: {status: verified, action: booked, count: {eq: 1}}
+    - active_bookings: {eq: 1}
+  assert_not:
+    - reply_matches: "I haven't booked anything yet"
+    - reply_matches: "You're booked for"
+expect_off:
+  outcome: unclaimed_booking
+  assert:
+    - guard_event: {guard: claim_ledger, event: safe_template}
+    - reply_matches: "I haven't booked anything yet"
+    - ledger: {status: verified, action: booked, count: {eq: 1}}
+    - active_bookings: {eq: 1}
+  assert_not:
+    - reply_matches: "^Booked:"
+    - guard_event: {guard: rendered_confirmation, event: rendered}

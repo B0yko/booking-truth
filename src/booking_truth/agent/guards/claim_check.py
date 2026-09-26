@@ -236,13 +236,29 @@ def ledger_lines(facts: Sequence[LedgerFact], zone: str) -> list[str]:
     return lines
 
 
-def guard_note(result: CheckResult, facts: Sequence[LedgerFact], *, zone: str, draft: str) -> str:
-    """The note for the one repair call: what was wrong, what the ledger says, the rejected draft."""
+def guard_note(
+    result: CheckResult,
+    facts: Sequence[LedgerFact],
+    *,
+    zone: str,
+    draft: str,
+    shown: Sequence[str] = (),
+) -> str:
+    """The note for the one repair call: what was wrong, what the ledger says, the rejected draft.
+    ``shown``: the code-rendered confirmation lines the prospect sees above the reply
+    (``rendered_confirmation``)."""
     problems = "\n".join(f"- {v.detail}" for v in result.violations)
     ledger = "\n".join(ledger_lines(facts, zone)) or "- nothing has been booked, moved or cancelled"
+    above = ""
+    if shown:
+        lines = "\n".join(f"- {line}" for line in shown)
+        above = (
+            "The prospect already sees this confirmation, written by code, above your reply, so you do not "
+            f"need to repeat its time or reference:\n{lines}\n\n"
+        )
     return (
         "[claim check] Your reply was not sent, because it claims something the calendar ledger does not "
-        f"show:\n{problems}\n\nVerified calendar ledger for this prospect:\n{ledger}\n\n"
+        f"show:\n{problems}\n\nVerified calendar ledger for this prospect:\n{ledger}\n\n{above}"
         'Write the reply again as the same JSON object {"reply": "...", "claims": [...]}. Say that a call '
         "is booked, moved or cancelled only when the ledger shows it, with the ledger's time and zone; offer "
         "only times from the latest find_slots result. Otherwise say plainly what happened and offer the "

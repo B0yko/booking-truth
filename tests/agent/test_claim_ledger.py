@@ -355,15 +355,16 @@ async def test_a_wrong_time_in_a_confirmation_is_blocked(sandbox: Sandbox, tmp_p
 
 
 async def test_a_code_rendered_reply_is_never_sent_for_repair(
-    guarded: AgentEnv, monkeypatch: pytest.MonkeyPatch
+    sandbox: Sandbox, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    offer = await guarded.say(ASK)
-    before = guarded.llm.calls  # type: ignore[attr-defined]
-    monkeypatch.setattr(AgentCore, "_ledger_facts", lambda self, ctx: [])
-    data = await guarded.act(slot_replies(offer)[0]["action"])
-    assert guarded.llm.calls == before  # type: ignore[attr-defined]
-    assert events(data) == ["verified", "claim_blocked", "safe_template"]
-    assert data["reply"].endswith(SAFE_LOOK)
+    async for env in make_env(sandbox, tmp_path, guards=NO_RENDERED_LINE):
+        offer = await env.say(ASK)
+        before = env.llm.calls  # type: ignore[attr-defined]
+        monkeypatch.setattr(AgentCore, "_ledger_facts", lambda self, ctx: [])
+        data = await env.act(slot_replies(offer)[0]["action"])
+        assert env.llm.calls == before  # type: ignore[attr-defined]
+        assert events(data) == ["verified", "claim_blocked", "safe_template"]
+        assert data["reply"] == SAFE_LOOK
 
 
 async def test_an_unavailable_calendar_makes_the_next_step_a_hand_off(

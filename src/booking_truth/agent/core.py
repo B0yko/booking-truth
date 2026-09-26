@@ -10,7 +10,8 @@ One turn, in order (``docs/adr`` and the guard list in the README):
 6. a structured action runs a code path; text runs the LLM tool loop (at most 8 model calls);
 7. ``claim_ledger`` claim check of the reply (with offer grounding under ``fail_closed``), one repair, then a
    safe template;
-8. ``rendered_confirmation``: the code-rendered line of a verified write;
+8. ``rendered_confirmation``: code renders the confirmation line of every verified write of the turn from its
+   ledger entry and puts it above the reply;
 9. quick replies from state; 10. persist history, trace steps and the response;
 11. CRM: ``crm_outbox`` queues verified writes; without it, the naive rule writes a meeting when the reply
     says "booked".
@@ -70,7 +71,7 @@ from booking_truth.calendars.base import CalendarAdapter
 from booking_truth.config import Settings
 from booking_truth.crm.base import ContactPayload, CrmAdapter, CrmOk, MeetingPayload
 from booking_truth.llm.types import LLM, ChatMessage, LLMError, ToolCall
-from booking_truth.store import Lead, Store, normalize_email
+from booking_truth.store import Lead, LedgerEntry, Store, normalize_email
 from booking_truth.timeutil import Clock, iso_ms_z, iso_z, parse_iso
 from booking_truth.trace.validate import trace_errors
 
@@ -103,6 +104,17 @@ class TurnOutcome:
 
 class LeadBusy(Exception):
     """Another turn holds the lead's lock."""
+
+
+@dataclass(frozen=True)
+class Confirmation:
+    """A verified write of the turn with its code-rendered confirmation (``rendered_confirmation``).
+    ``when`` is the long label the line states (date, local time, IANA zone and UTC offset)."""
+
+    write: WriteRecord
+    entry: LedgerEntry
+    when: str
+    line: str
 
 
 @dataclass
@@ -342,7 +354,8 @@ class AgentCore:
     ) -> FinalAnswer | None:
         """One more model call: the turn so far without the rejected answer, then a guard note that says what
         was wrong, what the ledger shows and what the rejected answer was."""
-        note = guard_note(check, facts, zone=ctx.zone, draft=result.reply)
+        shown = [c.line for c in self._hook_confirmations(ctx)]
+        note = guard_note(check, facts, zone=ctx.zone, draft=result.reply, shown=shown)
         turn = list(result.messages)
         if turn and turn[-1].role == "assistant" and not turn[-1].tool_calls:
             turn.pop()
@@ -374,7 +387,14 @@ class AgentCore:
     ) -> str:
         """The safe template: nothing was booked (or changed, for a reschedule or cancel claim, or when the
         lead already had a booking), plus the next step: a hand-off while the calendar is unavailable (its
-        last read in this conversation failed), else an offer to look for times."""
+        last read in this conversation failed), else an offer to look for times.
+
+        With ``rendered_confirmation`` and a verified write in this turn, the code-rendered confirmation line
+        goes above the reply and says what happened, so the safe reply is only the sentence that follows
+        it: saying that nothing was booked would contradict the line."""
+        confirmed = self._hook_confirmations(ctx)
+        if confirmed:
+            return render.confirmation_follow_up(confirmed[-1].entry.action)
         written = {w.booking.ref for w in ctx.state.writes}
         had_booking = any(f.current and f.action != "cancelled" and f.ref not in written for f in facts)
         changed = bool(check.kinds & {"rescheduled", "cancelled"}) or had_booking
@@ -393,15 +413,52 @@ class AgentCore:
         """Hook for ``crm_outbox``: queue a validated CRM payload for each verified write of the turn."""
         return None
 
-    def _confirmation_line(self, ctx: TurnContext) -> str | None:
-        """``rendered_confirmation``: the code-rendered line of the turn's last verified write."""
+    def _hook_confirmations(self, ctx: TurnContext) -> list[Confirmation]:
+        """``rendered_confirmation``: the turn's verified writes in the order they happened, each with the
+        confirmation line rendered from its ledger entry (date, local time, IANA zone with its UTC offset,
+        reference). The zone is the one the entry was written in: the lead's zone, else the host's. Empty
+        with the guard off, and for a write with no verified entry."""
         if not self.on("rendered_confirmation"):
-            return None
-        verified = [w for w in ctx.state.writes if w.status == "verified"]
-        if not verified:
-            return None
-        write = verified[-1]
-        return render.confirmation_line(write.action, write.booking.start, write.zone, write.booking.ref)
+            return []
+        found: list[Confirmation] = []
+        for write in ctx.state.writes:
+            if write.status != "verified":
+                continue
+            entry = self._ledger_entry(ctx, write)
+            if entry is None:
+                continue
+            zone = valid_zone(entry.zone) or write.zone
+            when = render.long_label(entry.start_utc, zone)
+            line = render.confirmation_line(entry.action, entry.start_utc, zone, entry.booking_ref)
+            found.append(Confirmation(write, entry, when, line))
+        return found
+
+    def _ledger_entry(self, ctx: TurnContext, write: WriteRecord) -> LedgerEntry | None:
+        """The verified ledger entry this turn's read-back recorded for ``write``."""
+        entries = self.store.claims.entries(
+            ctx.lead_email,
+            event_key=self.deps.calendar.event_key,
+            action=write.action,
+            status="verified",
+            session_id=ctx.session_id,
+        )
+        matching = [e for e in entries if e.booking_ref == write.booking.ref]
+        return matching[-1] if matching else None
+
+    def _add_confirmations(self, ctx: TurnContext, result: TurnResult) -> None:
+        """Put the confirmation lines above the reply (in the response and in the history the model sees
+        next turn). The reply's claims start with the lines' claims, which replace the reply's own claims of
+        the same kinds."""
+        confirmed = self._hook_confirmations(ctx)
+        if not confirmed:
+            return
+        lines = "\n".join(c.line for c in confirmed)
+        kinds = {c.entry.action for c in confirmed}
+        claims = [DeclaredClaim(c.entry.action, c.when) for c in confirmed]
+        claims += [c for c in result.claims if c.type not in kinds]
+        result.set_final(f"{lines}\n\n{result.reply}", claims)
+        for confirmation in confirmed:
+            ctx.state.event("rendered_confirmation", "rendered", confirmation.line)
 
     # The turn ---------------------------------------------------------------------------------------------
 
@@ -453,9 +510,7 @@ class AgentCore:
             )
         if statement and ctx.zone not in result.reply:
             result.reply = f"{result.reply}\n\n{statement}"
-        line = self._confirmation_line(ctx)
-        if line:
-            result.reply = f"{line}\n\n{result.reply}"
+        self._add_confirmations(ctx, result)
         quick = self._quick_replies(ctx, result)
         booking = self._booking_view(ctx)
         response = ChatResponse(
@@ -572,9 +627,16 @@ class AgentCore:
         """A code-rendered reply for the turn's last successful write, when the model gave none."""
         if not ctx.state.writes:
             return None
-        write = ctx.state.writes[-1]
+        return self._write_reply(ctx, ctx.state.writes[-1])
+
+    def _write_reply(self, ctx: TurnContext, write: WriteRecord) -> str:
+        """The code-rendered reply about a write of this turn. When the write's confirmation line is rendered
+        above the reply (``rendered_confirmation``), only the sentence that follows the line, which already
+        states the date, time, zone and reference."""
         if write.status == "unverified":
             return render.UNCONFIRMED
+        if any(c.write is write for c in self._hook_confirmations(ctx)):
+            return render.confirmation_follow_up(write.action)
         start, ref = write.booking.start, write.booking.ref
         if write.action == "booked":
             return render.booked_text(start, write.zone, ref)
@@ -658,7 +720,7 @@ class AgentCore:
         calls: list[tuple[str, dict[str, Any], Any]] = [("book_slot", args, result)]
         if isinstance(result, dict) and result.get("booked") is True:
             write = ctx.state.writes[-1]
-            reply = render.booked_text(write.booking.start, ctx.zone, write.booking.ref)
+            reply = self._write_reply(ctx, write)
             claim = DeclaredClaim("booked", self._label(ctx, write.booking.start))
             return self._coded(user_text, reply, calls=calls, claims=[claim])
         if isinstance(result, dict) and result.get("reason") == "already_booked":
@@ -749,7 +811,7 @@ class AgentCore:
         user_text = "Please move my booking to the time I picked."
         if isinstance(result, dict) and result.get("rescheduled") is True:
             write = ctx.state.writes[-1]
-            reply = render.rescheduled_text(write.booking.start, ctx.zone, write.booking.ref)
+            reply = self._write_reply(ctx, write)
             claim = DeclaredClaim("rescheduled", self._label(ctx, write.booking.start))
             return self._coded(user_text, reply, calls=calls, claims=[claim])
         if isinstance(result, dict) and result.get("rescheduled") == "unconfirmed":
@@ -778,7 +840,7 @@ class AgentCore:
         user_text = "Please cancel my booking."
         if isinstance(result, dict) and result.get("cancelled") is True:
             write = ctx.state.writes[-1]
-            reply = render.cancelled_text(write.booking.start, ctx.zone)
+            reply = self._write_reply(ctx, write)
             claim = DeclaredClaim("cancelled", self._label(ctx, write.booking.start))
             return self._coded(user_text, reply, calls=calls, claims=[claim])
         if isinstance(result, dict) and result.get("cancelled") == "unconfirmed":
