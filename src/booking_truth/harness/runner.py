@@ -716,12 +716,20 @@ class _Run:
                     # Hold the lock for the whole read-call-read window: another trial's concurrent
                     # ``extract`` call must not complete between our own before/after reads, or its cost
                     # would be folded into ours (only the caller in the window is ever charged for it).
+                    # The ``finally`` computes the diff even when ``extract`` bills the call and then
+                    # raises (a malformed or unparsable response): that spend is real and must still
+                    # reach this trial's ``extractor_usd``, not be silently dropped because grading falls
+                    # back to the lexicon belief.
                     async with self._extractor_cost_lock:
                         spent_before = float(getattr(config.llm_extractor, "usage_usd", 0.0))
-                        llm = await config.llm_extractor.extract(
-                            texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
-                        )
-                        extractor_usd = float(getattr(config.llm_extractor, "usage_usd", 0.0)) - spent_before
+                        try:
+                            llm = await config.llm_extractor.extract(
+                                texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
+                            )
+                        finally:
+                            extractor_usd = (
+                                float(getattr(config.llm_extractor, "usage_usd", 0.0)) - spent_before
+                            )
             except Exception as exc:
                 harness_error = harness_error or f"extractor error: {_harness_bug(exc)}"
         belief = llm or lexicon

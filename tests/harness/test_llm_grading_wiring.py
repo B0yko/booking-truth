@@ -20,6 +20,7 @@ from booking_truth.harness.lexicon_extractor import LexiconBeliefExtractor
 from booking_truth.harness.report import MANIFEST_FILE, TRACES_FILE
 from booking_truth.harness.runner import AgentUnderTest, RunConfig, run
 from booking_truth.harness.scenarios import load_suite, select_scenarios
+from booking_truth.llm.types import LLMError
 from booking_truth.sandbox.app import create_sandbox_app
 from booking_truth.serve import BackgroundServer
 from booking_truth.trace.validate import iter_jsonl
@@ -135,6 +136,63 @@ class ConcurrentCostExtractor:
             source="llm",
             evidence=belief.evidence,
         )
+
+
+class ExtractorThatFailsAfterBilling:
+    """Bills the model call and then fails to parse its response (a malformed or truncated structured
+    output, which a real provider can still return under ``response_format: json_schema``), exactly the
+    ``LLMExtractor.extract`` failure mode: the underlying ``llm.chat`` call already succeeded and was
+    billed (``usage_usd`` reflects that) before ``_parse`` raises. The harness's own per-trial
+    ``extractor_usd`` must still reflect that real spend, not silently drop it because the call that
+    incurred it did not return a belief.
+    """
+
+    source: BeliefSource = "llm"
+
+    COST = 0.0042
+
+    def __init__(self) -> None:
+        self.usage_usd = 0.0
+
+    async def extract(
+        self, agent_messages: Sequence[str], *, prospect_zone: str, host_zone: str, reference: datetime
+    ) -> Belief:
+        self.usage_usd += self.COST
+        raise LLMError("the extractor model returned invalid JSON", kind="malformed")
+
+
+async def test_extractor_spend_is_kept_even_when_the_call_errors_after_billing(
+    sandbox_url: str, tmp_path: Path
+) -> None:
+    out = tmp_path / "run"
+    with running_stub(sandbox_url) as (_, base):
+        agent = bundled_agent("stub", base, sandbox_url)
+        extractor = ExtractorThatFailsAfterBilling()
+        config = RunConfig(
+            agents=[agent],
+            scenarios=select_scenarios(SUITE, ["happy-book-host-zone"]),
+            suite_scenarios=SUITE,
+            k=1,
+            run_id="extractor-error-run",
+            out_dir=out,
+            settle_s=3,
+            stable_s=0.15,
+            hardware="test machine, 1 GB",
+            sandbox_token=SANDBOX_TOKEN,
+            command="booking-truth test --agent http://localhost:8000/v1/chat --sandbox http://localhost:8100",
+            llm_extractor=extractor,
+            extractor_model="fake/extractor-model",
+            max_attempts=1,
+        )
+        result = await run(config)
+
+    assert result.status == "complete"
+    assert result.results[0].outcome == "harness_error"
+    # The call really happened and really cost money (the extractor's own cumulative counter proves it);
+    # the trial's recorded extractor_usd, which feeds the manifest's total spend and the report's
+    # cost-per-conversation table, must account for it too.
+    assert extractor.usage_usd == pytest.approx(ExtractorThatFailsAfterBilling.COST)
+    assert result.results[0].extractor_usd == pytest.approx(ExtractorThatFailsAfterBilling.COST)
 
 
 async def test_a_trial_extractor_cost_excludes_a_concurrent_trials_spend(tmp_path: Path) -> None:
