@@ -226,6 +226,67 @@ def test_a_region_name_is_not_matched_below_the_stopword_floor() -> None:
     assert resolve("let's book a call, can you do Tuesday?", resolver=resolver) == Resolution("unknown")
 
 
+# Region codes as qualifiers, and structural precedence over a same-named region ---------------------------
+
+
+def test_a_canadian_subdivision_code_qualifies_a_city_over_a_same_named_australian_region() -> None:
+    # "Victoria" alone is the Australian state (region step, unchanged); immediately qualified by "BC"
+    # (British Columbia's ISO 3166-2 code) or the province's full name, it names the Canadian city
+    # instead, so the region step steps aside for the qualified-city step.
+    assert resolve("Victoria, BC") == Resolution("resolved", "America/Vancouver")
+    assert resolve("Victoria, British Columbia") == Resolution("resolved", "America/Vancouver")
+    assert resolve("Victoria") == Resolution("resolved", "Australia/Melbourne")
+
+
+def test_a_region_name_followed_by_its_own_country_is_unaffected() -> None:
+    # "Australia" is a country name, so the country step (step 4) matches it before the region step
+    # (step 5) ever runs, regardless of this change: ambiguous with Australia's own zones, as before.
+    assert resolve("Victoria, Australia") == resolve("Australia")
+    assert resolve("Victoria, Australia").status == "ambiguous"
+
+
+def test_a_us_postal_code_qualifies_a_city_the_same_way_a_full_state_name_does() -> None:
+    assert resolve("Portland, ME") == Resolution("resolved", "America/New_York")
+    assert resolve("Portland, Maine") == Resolution("resolved", "America/New_York")
+    assert resolve("Springfield, IL") == Resolution("resolved", "America/Chicago")
+    assert resolve("Springfield, Illinois") == Resolution("resolved", "America/Chicago")
+
+
+def test_an_australian_subdivision_code_is_unnecessary_when_already_unambiguous() -> None:
+    # Perth, Australia (2.38M) so dwarfs Perth, Scotland (47,350, under the 20% threshold) that the
+    # bare name already resolves; "WA" (Western Australia's code) is consistent with that, not a change.
+    assert resolve("Perth, WA") == Resolution("resolved", "Australia/Perth")
+    assert resolve("Perth") == Resolution("resolved", "Australia/Perth")
+
+
+def test_a_lowercase_code_is_not_mistaken_for_a_qualifier() -> None:
+    # Codes are matched case-sensitively, the same way an all-capitals alias is: a state code is always
+    # written in capitals, and matching it loosely would catch ordinary words a code happens to spell.
+    assert resolve("Portland, me") == Resolution("resolved", "America/Los_Angeles")  # unqualified: Oregon
+
+
+def test_region_step_precedence_is_a_general_mechanism_not_a_data_coincidence() -> None:
+    """The same structural rule as :func:`test_a_canadian_subdivision_code_qualifies_a_city...`, pinned
+    with synthetic data so it is not just a property of the bundled Victoria/British Columbia rows."""
+    matched_region = RegionRow("Example", "US", ("Etc/GMT+1",), code="EX")
+    other_region = RegionRow("Other", "US", ("Etc/GMT+2",), code="OT")
+    city = CityRow("Example", "Example", "US", "Other", 50_000, "Etc/GMT+2", admin1_code="OT")
+    resolver = TimezoneResolver(
+        aliases={},
+        country_names={},
+        country_zones={},
+        regions=(matched_region, other_region),
+        cities=(city,),
+        all_zones=("UTC",),
+    )
+    # Unqualified, "Example" is the region (step 5 fires first and there is no competing city step
+    # candidate to prefer anyway).
+    assert resolve("Example", resolver=resolver) == Resolution("resolved", "Etc/GMT+1")
+    # Immediately qualified by the *other* region's own code, the region step steps aside and the city
+    # (whose own region that code names) resolves instead.
+    assert resolve("Example, OT", resolver=resolver) == Resolution("resolved", "Etc/GMT+2")
+
+
 # Step 6: cities -----------------------------------------------------------------------------------------
 
 

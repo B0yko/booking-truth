@@ -42,6 +42,56 @@ _NAME_SYNONYMS: Mapping[str, str] = {
     "united kingdom": "GB",
 }
 
+#: Canadian provinces and territories' own first-level subdivision codes (source: ISO 3166-2:CA), keyed
+#: by the ``admin1_name`` ``cities_tz.csv`` gives them. ``cities_tz.csv``'s own ``admin1_code`` column
+#: for Canadian rows is GeoNames' internal numbering ("02", "08", ...), not this public code, so it is
+#: not usable directly the way a US row's ``admin1_code`` (already its postal code) is.
+_CA_SUBDIVISION_CODES: Mapping[str, str] = {
+    "Alberta": "AB",
+    "British Columbia": "BC",
+    "Manitoba": "MB",
+    "New Brunswick": "NB",
+    "Newfoundland and Labrador": "NL",
+    "Northwest Territories": "NT",
+    "Nova Scotia": "NS",
+    "Nunavut": "NU",
+    "Ontario": "ON",
+    "Prince Edward Island": "PE",
+    "Quebec": "QC",
+    "Saskatchewan": "SK",
+    "Yukon": "YT",
+}
+
+#: Australian states and territories' own first-level subdivision codes (source: ISO 3166-2:AU), keyed
+#: the same way as :data:`_CA_SUBDIVISION_CODES` and for the same reason (``cities_tz.csv``'s own
+#: ``admin1_code`` for Australian rows is likewise GeoNames' internal numbering).
+_AU_SUBDIVISION_CODES: Mapping[str, str] = {
+    "Australian Capital Territory": "ACT",
+    "New South Wales": "NSW",
+    "Northern Territory": "NT",
+    "Queensland": "QLD",
+    "South Australia": "SA",
+    "Tasmania": "TAS",
+    "Victoria": "VIC",
+    "Western Australia": "WA",
+}
+
+
+def region_code_for(country_code: str, admin1_name: str, admin1_code: str) -> str | None:
+    """The public first-level subdivision code ``admin1_name`` denotes, for a US, Canadian or
+    Australian row: a US state's own postal code (``admin1_code`` already is one, straight from
+    ``cities_tz.csv``), or the ISO 3166-2 code :data:`_CA_SUBDIVISION_CODES` or
+    :data:`_AU_SUBDIVISION_CODES` gives a Canadian province/territory or an Australian state/territory.
+    ``None`` for any other country, or a blank ``admin1_name``/``admin1_code``: a row outside these
+    three has no such code this guard recognises."""
+    if country_code == "US":
+        return admin1_code or None
+    if country_code == "CA":
+        return _CA_SUBDIVISION_CODES.get(admin1_name)
+    if country_code == "AU":
+        return _AU_SUBDIVISION_CODES.get(admin1_name)
+    return None
+
 
 @dataclass(frozen=True)
 class AliasEntry:
@@ -60,6 +110,11 @@ class CityRow:
     admin1_name: str
     population: int
     timezone: str
+    #: ``cities_tz.csv``'s own ``admin1_code`` column: a US row's two-letter postal code, or, for any
+    #: other country (including Canada and Australia, whose public subdivision code is a separate table
+    #: above), GeoNames' own internal numbering. Defaulted so existing positional construction (tests,
+    #: ``scripts/build_tz_phrases.py``'s own unrelated ``CityRow``) is unaffected.
+    admin1_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -75,6 +130,10 @@ class RegionRow:
     name: str
     country_code: str
     zones: tuple[str, ...]
+    #: The region's own first-level subdivision code (a US state's postal code, or the ISO 3166-2 code
+    #: for a Canadian province/territory or an Australian state/territory; see :func:`region_code_for`).
+    #: Defaulted so a synthetic ``RegionRow`` built directly (tests) need not supply one.
+    code: str = ""
 
 
 #: The three countries whose first-level regions get their own resolution step (design-agent.md SS4 /
@@ -185,6 +244,7 @@ def load_cities() -> tuple[CityRow, ...]:
                     admin1_name=record["admin1_name"],
                     population=int(record["population"]),
                     timezone=record["timezone"],
+                    admin1_code=record["admin1_code"],
                 )
             )
     return tuple(rows)
@@ -209,7 +269,10 @@ def load_regions() -> tuple[RegionRow, ...]:
         for row in ranked:
             if row.timezone not in zones:
                 zones.append(row.timezone)
-        regions.append(RegionRow(name=name, country_code=country_code, zones=tuple(zones)))
+        code = region_code_for(country_code, name, ranked[0].admin1_code)
+        if code is None:
+            raise ValueError(f"no subdivision code for {country_code} region {name!r}")
+        regions.append(RegionRow(name=name, country_code=country_code, zones=tuple(zones), code=code))
     return tuple(regions)
 
 
@@ -233,4 +296,5 @@ __all__ = [
     "load_country_names",
     "load_country_zones",
     "load_regions",
+    "region_code_for",
 ]

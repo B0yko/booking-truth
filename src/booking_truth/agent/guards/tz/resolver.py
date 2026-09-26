@@ -15,10 +15,16 @@ Resolution order (design-agent.md SS4/SSD; the product spec, item 4, gives the s
    GeoNames city (population 15,000 or more) when every one of those cities' zones carries the same
    UTC offset at every instant in the booking horizon, else ambiguous with those zones -- the same
    equivalence rule as step 4, one level down; a curated alias (step 3) that also names the region
-   still wins, since it is checked first;
+   still wins, since it is checked first. This step does not fire when the region name is immediately
+   followed by a subdivision code or another region's full name that points elsewhere ("Victoria, BC",
+   "Victoria, British Columbia"): that is a same-named city qualified into a different place, which
+   step 6 below resolves instead, not this bare region name (a qualifier naming a country is never
+   checked here, since step 4 would already have matched it);
 6. a city name (``datasets/cities_tz.csv``), resolved to its most populous match unless another,
    non-equivalent match has at least 20% of that population, in which case it is ambiguous with the
-   qualifying matches' zones.
+   qualifying matches' zones -- unless the text names one match's own first-level region, by its full
+   name or, for a US, Canadian or Australian match, its subdivision code ("Portland, Maine", "Portland,
+   ME", "Victoria, BC"), in which case that qualified match wins outright.
 
 Anything none of these six steps reaches is ``unknown``: never a silent fallback to any default zone.
 
@@ -54,6 +60,7 @@ from booking_truth.agent.guards.tz.data import (
     load_country_names,
     load_country_zones,
     load_regions,
+    region_code_for,
 )
 
 Status = Literal["resolved", "ambiguous", "unknown"]
@@ -154,6 +161,37 @@ def _mentions_phrase(text: str, phrase: str) -> bool:
     return any(words[i : i + len(target)] == target for i in range(len(words) - len(target) + 1))
 
 
+def _find_leftmost_span[T](
+    text: str,
+    max_words: int,
+    indices: Sequence[tuple[Mapping[str, T], bool]],
+    *,
+    min_single_word: int = 1,
+    stopwords: frozenset[str] = frozenset(),
+    require_capitalized: bool = False,
+) -> tuple[T, int, int] | None:
+    """As :func:`_find_leftmost`, but also returns the matched span's start token index and its length
+    in words, so a caller can inspect what immediately follows the match (the region step's structural
+    precedence check, below, is the one caller that needs this)."""
+    tokens = _tokenize(text)
+    lowered = [t.lower() for t in tokens]
+    for start in range(len(tokens)):
+        limit = min(max_words, len(tokens) - start)
+        for length in range(limit, 0, -1):
+            if length == 1 and (
+                len(tokens[start]) < min_single_word
+                or lowered[start] in stopwords
+                or (require_capitalized and not tokens[start][0].isupper())
+            ):
+                continue
+            for index, case_sensitive in indices:
+                words = tokens[start : start + length] if case_sensitive else lowered[start : start + length]
+                found = index.get(" ".join(words))
+                if found is not None:
+                    return found, start, length
+    return None
+
+
 def _find_leftmost[T](
     text: str,
     max_words: int,
@@ -173,23 +211,15 @@ def _find_leftmost[T](
     written, the ordinary way to write a place name ("Kathmandu"), which a common word used
     mid-sentence ("...evenings are best") is not; a stopword the writer capitalised anyway (a
     sentence's own first word, "Can I...") still needs ``stopwords`` to catch it."""
-    tokens = _tokenize(text)
-    lowered = [t.lower() for t in tokens]
-    for start in range(len(tokens)):
-        limit = min(max_words, len(tokens) - start)
-        for length in range(limit, 0, -1):
-            if length == 1 and (
-                len(tokens[start]) < min_single_word
-                or lowered[start] in stopwords
-                or (require_capitalized and not tokens[start][0].isupper())
-            ):
-                continue
-            for index, case_sensitive in indices:
-                words = tokens[start : start + length] if case_sensitive else lowered[start : start + length]
-                found = index.get(" ".join(words))
-                if found is not None:
-                    return found
-    return None
+    found = _find_leftmost_span(
+        text,
+        max_words,
+        indices,
+        min_single_word=min_single_word,
+        stopwords=stopwords,
+        require_capitalized=require_capitalized,
+    )
+    return found[0] if found is not None else None
 
 
 # Explicit IANA names and fixed offsets ------------------------------------------------------------------
@@ -401,6 +431,24 @@ def _build_region_index(regions: Iterable[RegionRow]) -> dict[str, RegionRow]:
     return index
 
 
+def _same_region(a: RegionRow, b: RegionRow) -> bool:
+    return a.name == b.name and a.country_code == b.country_code
+
+
+def _build_region_code_index(regions: Iterable[RegionRow]) -> dict[str, tuple[RegionRow, ...]]:
+    """Every region's own first-level subdivision code (:data:`RegionRow.code`, e.g. "BC", "IL"), keyed
+    so a qualifier found in text can be looked up in one step. Two regions of different countries can
+    share a code (US Washington and Australian Western Australia both read as "WA", US and Canadian and
+    Australian Northwest/Northern Territory both read as "NT"), so a code's value is every region that
+    carries it, not just one."""
+    index: dict[str, list[RegionRow]] = {}
+    for region in regions:
+        if not region.code:
+            continue
+        index.setdefault(region.code, []).append(region)
+    return {code: tuple(rows) for code, rows in index.items()}
+
+
 # The resolver ------------------------------------------------------------------------------------------
 
 
@@ -427,6 +475,7 @@ class TimezoneResolver:
         )
         self._country_zones = dict(country_zones if country_zones is not None else load_country_zones())
         self._regions = _build_region_index(regions if regions is not None else load_regions())
+        self._region_codes = _build_region_code_index(self._regions.values())
         self._cities = _build_city_index(cities if cities is not None else load_cities())
         self._all_zones = tuple(all_zones if all_zones is not None else load_all_zones())
 
@@ -486,7 +535,7 @@ class TimezoneResolver:
     # Step 5: US, Canadian and Australian first-level regions -----------------------------------------------
 
     def _region(self, text: str, now: datetime, horizon_days: int) -> Resolution:
-        region = _find_leftmost(
+        found = _find_leftmost_span(
             text,
             _REGION_MAX_WORDS,
             [(self._regions, False)],
@@ -494,10 +543,36 @@ class TimezoneResolver:
             stopwords=_GEO_STOPWORDS,
             require_capitalized=True,
         )
-        if region is None:
+        if found is None:
+            return UNKNOWN_RESOLUTION
+        region, start, length = found
+        if self._region_qualified_elsewhere(text, region, start + length):
+            # A same-named place in a *different* region or country ("Victoria, BC", "Victoria,
+            # British Columbia") -- the qualified-city step below resolves it instead, not this bare
+            # region name. A qualifier naming a country is never checked here: the country step runs
+            # before this one (see resolve(), below) and would already have matched it.
             return UNKNOWN_RESOLUTION
         groups = _equivalence_groups(region.zones, now, horizon_days)
         return _resolved_or_ambiguous([group[0] for group in groups])
+
+    def _region_qualified_elsewhere(self, text: str, region: RegionRow, after: int) -> bool:
+        """Whether the region match ending at token ``after`` is immediately followed by a first-level
+        subdivision code (``self._region_codes``) or another region's full name that names a region
+        other than ``region`` itself: the structural cue that the phrase actually qualifies a city
+        elsewhere, not this region."""
+        tokens = _tokenize(text)
+        if after >= len(tokens):
+            return False
+        code_matches = self._region_codes.get(tokens[after])
+        if code_matches is not None:
+            return not any(_same_region(other, region) for other in code_matches)
+        lowered = [t.lower() for t in tokens]
+        limit = min(_REGION_MAX_WORDS, len(tokens) - after)
+        for length in range(limit, 0, -1):
+            other = self._regions.get(" ".join(lowered[after : after + length]))
+            if other is not None:
+                return not _same_region(other, region)
+        return False
 
     # Step 6: cities -----------------------------------------------------------------------------------------
 
@@ -532,10 +607,22 @@ class TimezoneResolver:
         """A same-named match the text names by its own region ("Portland, Maine" beats the more
         populous Portland, Oregon), when the top match's own region is not also named. Population
         still breaks a tie between two qualified regions of the same name."""
-        if top.admin1_name and _mentions_phrase(text, top.admin1_name):
+        if TimezoneResolver._row_names_own_region(text, top):
             return None
-        qualified = [r for r in others if r.admin1_name and _mentions_phrase(text, r.admin1_name)]
+        qualified = [r for r in others if TimezoneResolver._row_names_own_region(text, r)]
         return max(qualified, key=lambda r: r.population) if qualified else None
+
+    @staticmethod
+    def _row_names_own_region(text: str, row: CityRow) -> bool:
+        """Whether ``text`` names ``row``'s own first-level region: its full ``admin1_name`` mentioned
+        anywhere ("Portland, Maine"), or, for a US, Canadian or Australian row, its subdivision code
+        written exactly as such ("Portland, ME", "Victoria, BC") -- a postal or ISO 3166-2 code is
+        always written in capitals, so this is checked case-sensitively, the same way a curated
+        all-capitals alias is (an ordinary word a code happens to spell, "in", "hi", "or", is not one)."""
+        if row.admin1_name and _mentions_phrase(text, row.admin1_name):
+            return True
+        code = region_code_for(row.country_code, row.admin1_name, row.admin1_code)
+        return code is not None and code in _tokenize(text)
 
     # The six steps, in order -----------------------------------------------------------------------------
 

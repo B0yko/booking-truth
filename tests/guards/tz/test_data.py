@@ -113,6 +113,48 @@ def test_every_region_zone_is_a_valid_zoneinfo_key() -> None:
             assert data.is_valid_zone(zone), (region.name, zone)
 
 
+def test_region_code_for_a_us_row_is_its_own_admin1_code() -> None:
+    assert data.region_code_for("US", "Illinois", "IL") == "IL"
+    assert data.region_code_for("US", "Maine", "ME") == "ME"
+    assert data.region_code_for("US", "Some State", "") is None  # a blank admin1_code is never a code
+
+
+def test_region_code_for_canada_and_australia_uses_the_iso_3166_2_table_not_geonames_numbering() -> None:
+    # cities_tz.csv's own admin1_code for these two countries is GeoNames' internal numbering ("02"),
+    # not the public subdivision code ("BC"); region_code_for ignores it and uses the bundled table.
+    assert data.region_code_for("CA", "British Columbia", "02") == "BC"
+    assert data.region_code_for("CA", "Ontario", "08") == "ON"
+    assert data.region_code_for("AU", "Victoria", "07") == "VIC"
+    assert data.region_code_for("AU", "Western Australia", "08") == "WA"
+
+
+def test_region_code_for_is_none_outside_us_canada_and_australia() -> None:
+    assert data.region_code_for("GB", "Scotland", "") is None
+    assert data.region_code_for("CA", "Nonexistent Territory", "99") is None
+
+
+def test_every_region_carries_its_own_subdivision_code() -> None:
+    for region in data.load_regions():
+        assert region.code, (region.country_code, region.name)
+    regions = {(r.country_code, r.name): r for r in data.load_regions()}
+    assert regions[("US", "Illinois")].code == "IL"
+    assert regions[("US", "District of Columbia")].code == "DC"
+    assert regions[("CA", "British Columbia")].code == "BC"
+    assert regions[("AU", "Victoria")].code == "VIC"
+
+
+def test_cities_carry_their_admin1_code() -> None:
+    cities = data.load_cities()
+    portland_maine = next(c for c in cities if c.name == "Portland" and c.admin1_name == "Maine")
+    assert portland_maine.admin1_code == "ME"
+    victoria_bc = next(
+        c
+        for c in cities
+        if c.name == "Victoria" and c.country_code == "CA" and c.admin1_name == "British Columbia"
+    )
+    assert victoria_bc.admin1_code == "02"  # GeoNames' own numbering, not the ISO code
+
+
 def test_cities_load_with_the_documented_columns() -> None:
     cities = data.load_cities()
     assert len(cities) > 30000
