@@ -1,0 +1,81 @@
+# The offline demo stack: `docker compose up`, then open http://localhost:8000/demo and http://localhost:8100/_ui.
+#
+# - sandbox: the in-memory Cal.com / Google Calendar / HubSpot mirror (port 8100).
+# - agent:   the guarded booking agent (port 8000), using its real Cal.com and HubSpot adapters pointed at the
+#            sandbox, so the demo runs the same adapter code as a real deployment.
+#
+# Works on a fresh clone with no .env: without BT_LLM_API_KEY the agent runs its scripted offline policy.
+# To use a model, put BT_LLM_API_KEY in .env or export it in the shell (OPENROUTER_API_KEY is never read here).
+# Only the agent loads .env; the sandbox needs nothing from it but BT_SANDBOX_TOKEN, which Compose substitutes.
+#
+# Both services name the release image and a local build. When an image with that tag is already present
+# locally, Compose uses it as is. Otherwise it tries to pull it and, when it is not published (or not
+# reachable), builds it from this checkout. After changing the source, run `docker compose up --build`.
+# Ports are bound to 127.0.0.1 only.
+
+name: booking-truth
+
+services:
+  sandbox:
+    image: ghcr.io/b0yko/booking-truth:0.1.0
+    build: .
+    command: ["sandbox", "serve", "--host", "0.0.0.0", "--port", "8100"]
+    environment:
+      BT_SANDBOX_TOKEN: ${BT_SANDBOX_TOKEN:-sandbox}
+    ports:
+      - "127.0.0.1:8100:8100"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/_ui', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 1s
+    restart: unless-stopped
+
+  agent:
+    image: ghcr.io/b0yko/booking-truth:0.1.0
+    build: .
+    command: ["agent", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Calendar and CRM: the real adapters, pointed at the sandbox with the sandbox token.
+      BT_CALENDAR: calcom
+      BT_CALCOM_BASE_URL: http://sandbox:8100
+      BT_CALCOM_API_KEY: ${BT_SANDBOX_TOKEN:-sandbox}
+      BT_CALCOM_EVENT_TYPE_ID: "1001"
+      BT_CRM: hubspot
+      BT_HUBSPOT_BASE_URL: http://sandbox:8100
+      BT_HUBSPOT_TOKEN: ${BT_SANDBOX_TOKEN:-sandbox}
+      BT_HORIZON_DAYS: "400"
+      # Agent.
+      BT_API_KEY: ${BT_API_KEY:-dev-local-key}
+      BT_GUARDS: ${BT_GUARDS:-all}
+      BT_ALLOWED_ORIGINS: ${BT_ALLOWED_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000}
+      # Idempotency keys, the claim ledger, the CRM outbox and the cost ledger survive restarts on the volume.
+      BT_DB_PATH: /data/agent.db
+      BT_LEDGER_DIR: /data/ledger
+      # From .env or the shell only; empty means offline demo mode.
+      BT_LLM_API_KEY: ${BT_LLM_API_KEY:-}
+      # Blank even when .env defines it, so the agent can never fall back to it inside a container.
+      OPENROUTER_API_KEY: ""
+    volumes:
+      - agent-data:/data
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+    restart: unless-stopped
+
+volumes:
+  agent-data:

@@ -1,0 +1,18 @@
+# Allow-list: the build context holds only what the wheel needs. Everything else (.env, .git, virtualenvs,
+# node_modules, runs/, results/, tests, docs) never reaches the Docker daemon.
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!pricing.yaml
+!src/
+!scenarios/
+!datasets/
+!schemas/
+!widget/widget.js
+!widget/demo.html
+
+**/__pycache__
+**/*.py[cod]
+**/.DS_Store

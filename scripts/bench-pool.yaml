@@ -1,0 +1,15 @@
+# The (agent, sandbox) pairs of docker-compose.bench.yml, used by scripts/bench.sh as `--pool`.
+# Each trial gets one pair to itself; the ports must match the compose file.
+agents:
+  - label: guarded
+    mode: guarded
+    pairs:
+      - {agent: "http://127.0.0.1:8201/v1/chat", sandbox: "http://127.0.0.1:8301"}
+      - {agent: "http://127.0.0.1:8202/v1/chat", sandbox: "http://127.0.0.1:8302"}
+      - {agent: "http://127.0.0.1:8203/v1/chat", sandbox: "http://127.0.0.1:8303"}
+  - label: naive
+    mode: naive
+    pairs:
+      - {agent: "http://127.0.0.1:8211/v1/chat", sandbox: "http://127.0.0.1:8311"}
+      - {agent: "http://127.0.0.1:8212/v1/chat", sandbox: "http://127.0.0.1:8312"}
+      - {agent: "http://127.0.0.1:8213/v1/chat", sandbox: "http://127.0.0.1:8313"}

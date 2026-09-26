@@ -1,0 +1,139 @@
+# Benchmark pool: 3 guarded and 3 naive (agent, sandbox) pairs, so trials run in parallel while each trial still
+# has a sandbox to itself. Driven by scripts/bench.sh, which writes the matching pool.yaml:
+#
+#   guarded  agents 127.0.0.1:8201-8203  ->  sandboxes 127.0.0.1:8301-8303
+#   naive    agents 127.0.0.1:8211-8213  ->  sandboxes 127.0.0.1:8311-8313
+#
+# Memory limits are sized for a 4 CPU / 6 GiB Docker VM (colima). Measured idle with `docker stats`: about 65 MiB
+# for a sandbox and for an agent-sized process. Limits leave 4-6x headroom and total 3.75 GiB:
+# 6 x 384 MiB (agents) + 6 x 256 MiB (sandboxes).
+#
+# Every agent appends its LLM costs to its own file in BT_LEDGER_DIR (bind-mounted), so the global budget check
+# sees all of them. BT_LLM_API_KEY comes from the environment of scripts/bench.sh only.
+
+name: booking-truth-bench
+
+x-image: &image
+  image: ghcr.io/b0yko/booking-truth:0.1.0
+  build: .
+
+x-sandbox: &sandbox
+  <<: *image
+  command: ["sandbox", "serve", "--host", "0.0.0.0", "--port", "8100"]
+  environment:
+    BT_SANDBOX_TOKEN: ${BT_SANDBOX_TOKEN:-sandbox}
+  mem_limit: 256m
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/_ui', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 20s
+    start_interval: 1s
+
+x-agent-env: &agent-env
+  BT_CALENDAR: calcom
+  BT_CALCOM_API_KEY: ${BT_SANDBOX_TOKEN:-sandbox}
+  BT_CALCOM_EVENT_TYPE_ID: "1001"
+  BT_CRM: hubspot
+  BT_HUBSPOT_TOKEN: ${BT_SANDBOX_TOKEN:-sandbox}
+  BT_HORIZON_DAYS: "400"
+  BT_API_KEY: ${BT_API_KEY:-dev-local-key}
+  BT_EXPOSE_TRACES: "true"
+  BT_DB_PATH: /data/agent.db
+  BT_LEDGER_DIR: /ledger
+  BT_BUDGET_USD: ${BT_BUDGET_USD:-}
+  BT_LLM_API_KEY: ${BT_LLM_API_KEY:-}
+  BT_LLM_BASE_URL: ${BT_LLM_BASE_URL:-}
+  BT_LLM_MODEL: ${BT_LLM_MODEL:-}
+  BT_LLM_PROVIDER: ${BT_LLM_PROVIDER:-}
+
+x-agent: &agent
+  <<: *image
+  command: ["agent", "serve", "--host", "0.0.0.0", "--port", "8000"]
+  volumes:
+    - ${BT_LEDGER_DIR:?set BT_LEDGER_DIR to the cost ledger directory}:/ledger
+  mem_limit: 384m
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+    start_interval: 1s
+
+services:
+  sandbox-g1:
+    <<: *sandbox
+    ports: ["127.0.0.1:8301:8100"]
+  sandbox-g2:
+    <<: *sandbox
+    ports: ["127.0.0.1:8302:8100"]
+  sandbox-g3:
+    <<: *sandbox
+    ports: ["127.0.0.1:8303:8100"]
+  sandbox-n1:
+    <<: *sandbox
+    ports: ["127.0.0.1:8311:8100"]
+  sandbox-n2:
+    <<: *sandbox
+    ports: ["127.0.0.1:8312:8100"]
+  sandbox-n3:
+    <<: *sandbox
+    ports: ["127.0.0.1:8313:8100"]
+
+  agent-g1:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: all
+      BT_CALCOM_BASE_URL: http://sandbox-g1:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-g1:8100
+    ports: ["127.0.0.1:8201:8000"]
+    depends_on: {sandbox-g1: {condition: service_healthy}}
+  agent-g2:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: all
+      BT_CALCOM_BASE_URL: http://sandbox-g2:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-g2:8100
+    ports: ["127.0.0.1:8202:8000"]
+    depends_on: {sandbox-g2: {condition: service_healthy}}
+  agent-g3:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: all
+      BT_CALCOM_BASE_URL: http://sandbox-g3:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-g3:8100
+    ports: ["127.0.0.1:8203:8000"]
+    depends_on: {sandbox-g3: {condition: service_healthy}}
+
+  agent-n1:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: "off"
+      BT_CALCOM_BASE_URL: http://sandbox-n1:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-n1:8100
+    ports: ["127.0.0.1:8211:8000"]
+    depends_on: {sandbox-n1: {condition: service_healthy}}
+  agent-n2:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: "off"
+      BT_CALCOM_BASE_URL: http://sandbox-n2:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-n2:8100
+    ports: ["127.0.0.1:8212:8000"]
+    depends_on: {sandbox-n2: {condition: service_healthy}}
+  agent-n3:
+    <<: *agent
+    environment:
+      <<: *agent-env
+      BT_GUARDS: "off"
+      BT_CALCOM_BASE_URL: http://sandbox-n3:8100
+      BT_HUBSPOT_BASE_URL: http://sandbox-n3:8100
+    ports: ["127.0.0.1:8213:8000"]
+    depends_on: {sandbox-n3: {condition: service_healthy}}
