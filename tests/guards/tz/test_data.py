@@ -77,6 +77,42 @@ def test_all_zones_covers_every_country_zone() -> None:
         assert data.is_valid_zone(zone)
 
 
+def test_regions_cover_every_us_state_and_the_district() -> None:
+    regions = {r.name: r for r in data.load_regions() if r.country_code == "US"}
+    assert len(regions) == 51  # 50 states + the District of Columbia
+    assert regions["Arizona"].zones == ("America/Phoenix",)
+    assert set(regions["Texas"].zones) == {"America/Chicago", "America/Denver"}
+
+
+def test_regions_cover_canadian_provinces_and_australian_states() -> None:
+    by_country: dict[str, set[str]] = {}
+    for region in data.load_regions():
+        by_country.setdefault(region.country_code, set()).add(region.name)
+    assert "Ontario" in by_country["CA"]
+    assert "Alberta" in by_country["CA"]
+    assert "Queensland" in by_country["AU"]
+    assert "Victoria" in by_country["AU"]
+    # Nunavut has no GeoNames city of population >= 15,000, so it is correctly absent, not a bug.
+    assert "Nunavut" not in by_country["CA"]
+
+
+def test_regions_are_restricted_to_us_canada_and_australia() -> None:
+    assert {r.country_code for r in data.load_regions()} == {"US", "CA", "AU"}
+
+
+def test_a_regions_zones_are_ordered_with_its_most_populous_citys_zone_first() -> None:
+    regions = {r.name: r for r in data.load_regions() if r.country_code == "US"}
+    # Phoenix (America/Phoenix) is comfortably Arizona's most populous qualifying city.
+    assert regions["Arizona"].zones[0] == "America/Phoenix"
+
+
+def test_every_region_zone_is_a_valid_zoneinfo_key() -> None:
+    for region in data.load_regions():
+        assert region.zones, region.name
+        for zone in region.zones:
+            assert data.is_valid_zone(zone), (region.name, zone)
+
+
 def test_cities_load_with_the_documented_columns() -> None:
     cities = data.load_cities()
     assert len(cities) > 30000

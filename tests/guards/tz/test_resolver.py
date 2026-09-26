@@ -1,4 +1,4 @@
-"""``TimezoneResolver`` (``agent/guards/tz/resolver.py``): the five-step resolution order, the pre-scan
+"""``TimezoneResolver`` (``agent/guards/tz/resolver.py``): the six-step resolution order, the pre-scan
 phrase detector, and local time <-> UTC conversion."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import pytest
 from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
-from booking_truth.agent.guards.tz.data import CityRow
+from booking_truth.agent.guards.tz.data import AliasEntry, CityRow, RegionRow
 from booking_truth.agent.guards.tz.resolver import (
     LocalInstant,
     Resolution,
@@ -134,11 +134,105 @@ def test_a_name_two_countries_share_is_ambiguous_across_them() -> None:
     assert set(congo.candidates) == {"Africa/Kinshasa", "Africa/Lubumbashi"}
 
 
-# Step 5: cities -----------------------------------------------------------------------------------------
+# Step 5: US, Canadian and Australian first-level regions -------------------------------------------------
+
+
+def _synthetic_region_resolver(
+    *regions: RegionRow, aliases: dict[str, AliasEntry] | None = None
+) -> TimezoneResolver:
+    return TimezoneResolver(
+        aliases=aliases if aliases is not None else {},
+        country_names={},
+        country_zones={},
+        regions=regions,
+        cities=(),
+        all_zones=("UTC",),
+    )
+
+
+def test_a_single_zone_region_resolves_without_asking() -> None:
+    # Arizona: every GeoNames city of population >= 15,000 is on America/Phoenix (no Navajo Nation
+    # settlement of that size observes summer time), so the bare state name resolves outright.
+    assert resolve("I'm in Arizona") == Resolution("resolved", "America/Phoenix")
+
+
+def test_a_canadian_province_resolves_by_its_common_forms() -> None:
+    # Alberta has kept a single UTC-06:00/-07:00 (Mountain, with summer time) schedule across every one
+    # of its qualifying cities, so both a lead-in and a bare "X time" phrase resolve it.
+    assert resolve("we're in Alberta") == Resolution("resolved", "America/Edmonton")
+    assert resolve("Alberta time works for me") == Resolution("resolved", "America/Edmonton")
+
+
+def test_an_australian_region_without_dst_resolves() -> None:
+    assert resolve("we're in Queensland") == Resolution("resolved", "Australia/Brisbane")
+
+
+def test_an_australian_region_with_dst_resolves() -> None:
+    assert resolve("I'm in Victoria") == Resolution("resolved", "Australia/Melbourne")
+
+
+def test_a_split_us_state_is_ambiguous_with_its_zones() -> None:
+    # Texas: El Paso and the rest of west Texas are on Mountain time, the rest on Central.
+    texas = resolve("I'm in Texas")
+    assert texas.status == "ambiguous"
+    assert set(texas.candidates) == {"America/Chicago", "America/Denver"}
+
+
+def test_a_split_province_is_ambiguous_with_its_zones() -> None:
+    # Ontario: the great majority is Eastern time, but its north-west (Kenora district and around) is
+    # Central, a genuinely different civil time, not a naming quirk.
+    ontario = resolve("Ontario time")
+    assert ontario.status == "ambiguous"
+    assert set(ontario.candidates) == {"America/Toronto", "America/Winnipeg"}
+
+
+def test_a_region_name_beats_a_small_same_named_town_elsewhere() -> None:
+    # Without this step, these bare state names would have matched the only GeoNames *city* of that
+    # exact name: a small town an ocean away, sharing nothing but the name, that the city step would
+    # otherwise resolve to outright (no competing same-name city, so no ambiguity ever raised).
+    assert resolve("I'm in Arizona") == Resolution("resolved", "America/Phoenix")  # not Honduras
+    assert resolve("I'm in Montana") == Resolution("resolved", "America/Denver")  # not Bulgaria
+    assert resolve("I'm in Colorado") == Resolution("resolved", "America/Denver")  # not Brazil
+
+
+def test_a_region_whose_zones_are_all_equivalent_resolves_to_its_top_citys_zone() -> None:
+    resolver = _synthetic_region_resolver(
+        RegionRow("Twinstate", "ZZ", ("America/New_York", "America/Detroit"))
+    )
+    # "America/New_York" is listed first: by construction (data.py's load_regions), that is always the
+    # region's single most populous qualifying city, and it is what a single-group resolution names.
+    assert resolve("Twinstate time", resolver=resolver) == Resolution("resolved", "America/New_York")
+
+
+def test_a_region_with_non_equivalent_zones_is_ambiguous_with_those_zones() -> None:
+    resolver = _synthetic_region_resolver(
+        RegionRow("Splitstate", "ZZ", ("America/Chicago", "America/Denver"))
+    )
+    ambiguous = resolve("I'm in Splitstate", resolver=resolver)
+    assert ambiguous.status == "ambiguous"
+    assert set(ambiguous.candidates) == {"America/Chicago", "America/Denver"}
+
+
+def test_a_curated_alias_wins_over_a_same_named_region() -> None:
+    resolver = _synthetic_region_resolver(
+        RegionRow("Curatedstate", "ZZ", ("America/Denver",)),
+        aliases={"Curatedstate": AliasEntry("resolved", zone="America/Chicago")},
+    )
+    assert resolve("Curatedstate", resolver=resolver) == Resolution("resolved", "America/Chicago")
+
+
+def test_a_region_name_is_not_matched_below_the_stopword_floor() -> None:
+    resolver = _synthetic_region_resolver(RegionRow("Us", "ZZ", ("America/Chicago",)))
+    assert resolve("let's book a call, can you do Tuesday?", resolver=resolver) == Resolution("unknown")
+
+
+# Step 6: cities -----------------------------------------------------------------------------------------
 
 
 def _synthetic_resolver(*cities: CityRow) -> TimezoneResolver:
-    return TimezoneResolver(aliases={}, country_names={}, country_zones={}, cities=cities, all_zones=("UTC",))
+    return TimezoneResolver(
+        aliases={}, country_names={}, country_zones={}, regions=(), cities=cities, all_zones=("UTC",)
+    )
 
 
 def test_the_most_populous_match_resolves_a_bare_city_name() -> None:
@@ -367,11 +461,11 @@ def test_every_gap_in_the_horizon_is_rejected(case: tuple[str, datetime]) -> Non
 
 
 def test_the_iana_offset_and_alias_steps_work_with_no_geo_data_at_all() -> None:
-    """A resolver built with no cities and no countries (like the ones above, used for the
+    """A resolver built with no cities, countries or regions (like the ones above, used for the
     deterministic city-ambiguity tests) still runs the first three steps: they do not depend on the
-    country or city index, so a place name outside it is correctly ``unknown``, not a crash."""
+    country, region or city index, so a place name outside it is correctly ``unknown``, not a crash."""
     resolver = TimezoneResolver(
-        aliases=None, country_names={}, country_zones={}, cities=(), all_zones=("UTC",)
+        aliases=None, country_names={}, country_zones={}, regions=(), cities=(), all_zones=("UTC",)
     )
     assert resolve("IST", resolver=resolver).status == "ambiguous"
     assert resolve("Europe/Berlin", resolver=resolver) == Resolution("resolved", "Europe/Berlin")

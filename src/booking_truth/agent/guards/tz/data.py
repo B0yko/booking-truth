@@ -8,6 +8,9 @@ Three sources, each read once and cached:
   ``zoneinfo/zone.tab`` (country code -> its zones, in file order): the IANA tz database's own country
   and zone tables, not copied into this repository.
 - ``datasets/cities_tz.csv``: the bundled GeoNames-derived city gazetteer (see ``datasets/README.md``).
+  :func:`load_regions` derives the first-level regions (US states, Canadian provinces and territories,
+  Australian states and territories) from this same file's ``admin1_name`` column; it is not a fourth
+  source.
 
 Nothing here resolves anything; :mod:`booking_truth.agent.guards.tz.resolver` does that with what these
 loaders return.
@@ -57,6 +60,30 @@ class CityRow:
     admin1_name: str
     population: int
     timezone: str
+
+
+@dataclass(frozen=True)
+class RegionRow:
+    """One first-level administrative region (a US state, a Canadian province or territory, an
+    Australian state or territory) that has at least one GeoNames city of population 15,000 or more in
+    ``cities_tz.csv``.
+
+    ``zones`` are that region's distinct zones, one per qualifying city, ordered so that ``zones[0]``
+    is always the zone of the region's single most populous qualifying city (the ``README.md``
+    "Regions and countries" rule's resolved-case target)."""
+
+    name: str
+    country_code: str
+    zones: tuple[str, ...]
+
+
+#: The three countries whose first-level regions get their own resolution step (design-agent.md SS4 /
+#: the product spec, item 4: region names belong before cities). Data-derived, not hand-picked: every
+#: region here comes straight out of ``cities_tz.csv``'s own ``admin1_name`` column.
+_REGION_COUNTRIES = frozenset({"US", "CA", "AU"})
+#: The same population floor the region rule uses to decide which cities count towards a region's zones
+#: (``datasets/README.md``, "Regions and countries").
+_REGION_MIN_POPULATION = 15_000
 
 
 def _zoneinfo_root() -> importlib.resources.abc.Traversable:
@@ -163,6 +190,29 @@ def load_cities() -> tuple[CityRow, ...]:
     return tuple(rows)
 
 
+@lru_cache(maxsize=1)
+def load_regions() -> tuple[RegionRow, ...]:
+    """One :class:`RegionRow` per ``(country_code, admin1_name)`` of :data:`_REGION_COUNTRIES` that has
+    at least one qualifying city, built straight from :func:`load_cities`: nothing here is hand-picked,
+    so a region this data does not support (no qualifying city at all) simply is not a row."""
+    by_region: dict[tuple[str, str], list[CityRow]] = {}
+    for row in load_cities():
+        if row.country_code not in _REGION_COUNTRIES or not row.admin1_name:
+            continue
+        if row.population < _REGION_MIN_POPULATION:
+            continue
+        by_region.setdefault((row.country_code, row.admin1_name), []).append(row)
+    regions: list[RegionRow] = []
+    for (country_code, name), rows in by_region.items():
+        ranked = sorted(rows, key=lambda r: -r.population)
+        zones: list[str] = []
+        for row in ranked:
+            if row.timezone not in zones:
+                zones.append(row.timezone)
+        regions.append(RegionRow(name=name, country_code=country_code, zones=tuple(zones)))
+    return tuple(regions)
+
+
 def is_valid_zone(name: str) -> bool:
     try:
         ZoneInfo(name)
@@ -174,6 +224,7 @@ def is_valid_zone(name: str) -> bool:
 __all__ = [
     "AliasEntry",
     "CityRow",
+    "RegionRow",
     "country_codes_for",
     "is_valid_zone",
     "load_aliases",
@@ -181,4 +232,5 @@ __all__ = [
     "load_cities",
     "load_country_names",
     "load_country_zones",
+    "load_regions",
 ]

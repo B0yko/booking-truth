@@ -10,16 +10,22 @@ Resolution order (design-agent.md SS4/SSD; the product spec, item 4, gives the s
 4. a country name (``iso3166.tab``), resolved to its first ``zone.tab`` zone when every one of its
    zones carries the same UTC offset at every instant in the booking horizon, else ambiguous with
    those zones;
-5. a city name (``datasets/cities_tz.csv``), resolved to its most populous match unless another,
+5. a first-level region name of the US, Canada or Australia (a state, province, territory: the
+   ``admin1_name`` column of ``datasets/cities_tz.csv``), resolved to the zone of its most populous
+   GeoNames city (population 15,000 or more) when every one of those cities' zones carries the same
+   UTC offset at every instant in the booking horizon, else ambiguous with those zones -- the same
+   equivalence rule as step 4, one level down; a curated alias (step 3) that also names the region
+   still wins, since it is checked first;
+6. a city name (``datasets/cities_tz.csv``), resolved to its most populous match unless another,
    non-equivalent match has at least 20% of that population, in which case it is ambiguous with the
    qualifying matches' zones.
 
-Anything none of these five steps reaches is ``unknown``: never a silent fallback to any default zone.
+Anything none of these six steps reaches is ``unknown``: never a silent fallback to any default zone.
 
 :meth:`TimezoneResolver.prescan` is the separate phrase detector ``AgentCore`` runs over the prospect's
 own message before the model sees it (design-agent.md SSB.5): it looks for a handful of ways people
 state where they are ("I'm in X", "we're on X", "X time", "calling from X") or a bare abbreviation,
-offset or IANA name, and resolves whatever it finds through the same five steps.
+offset or IANA name, and resolves whatever it finds through the same six steps.
 
 :func:`local_instant` is the other half of the guard's time handling (design.md SS2): converting a
 naive local wall-clock reading to UTC, rejecting one a DST gap skips over and flagging one a DST fold
@@ -40,12 +46,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from booking_truth.agent.guards.tz.data import (
     AliasEntry,
     CityRow,
+    RegionRow,
     country_codes_for,
     load_aliases,
     load_all_zones,
     load_cities,
     load_country_names,
     load_country_zones,
+    load_regions,
 )
 
 Status = Literal["resolved", "ambiguous", "unknown"]
@@ -55,6 +63,7 @@ DEFAULT_HORIZON_DAYS = 400
 CITY_AMBIGUITY_SHARE = 0.20
 _ALIAS_MAX_WORDS = 4
 _COUNTRY_MAX_WORDS = 6
+_REGION_MAX_WORDS = 4
 _CITY_MAX_WORDS = 6
 #: A daily sample is close enough: every real ambiguity in ``zone.tab`` (Arizona, Indiana, Kazakhstan,
 #: Spain, Brazil, China, Russia, the USA) is a difference of months, not hours, and a genuine future
@@ -371,6 +380,27 @@ def _build_country_index(country_names: Mapping[str, str]) -> dict[str, str]:
     return index
 
 
+def _build_region_index(regions: Iterable[RegionRow]) -> dict[str, RegionRow]:
+    """Re-key :func:`load_regions` by the same word tokeniser the matcher uses at query time (so "New
+    South Wales" matches however it is capitalised or spaced). The bundled data has no two regions of
+    :data:`_REGION_COUNTRIES <booking_truth.agent.guards.tz.data._REGION_COUNTRIES>` sharing a reading,
+    so a collision here means the dataset changed underneath this index; that is worth failing loudly
+    on rather than silently resolving to whichever region happened to be built last."""
+    index: dict[str, RegionRow] = {}
+    for region in regions:
+        key = " ".join(_lowered_words(region.name))
+        if not key:
+            continue
+        existing = index.get(key)
+        if existing is not None and existing != region:
+            raise ValueError(
+                f"region name collision: {existing.name!r} ({existing.country_code}) and "
+                f"{region.name!r} ({region.country_code}) both read as {key!r}"
+            )
+        index[key] = region
+    return index
+
+
 # The resolver ------------------------------------------------------------------------------------------
 
 
@@ -385,6 +415,7 @@ class TimezoneResolver:
         aliases: Mapping[str, AliasEntry] | None = None,
         country_names: Mapping[str, str] | None = None,
         country_zones: Mapping[str, tuple[str, ...]] | None = None,
+        regions: Sequence[RegionRow] | None = None,
         cities: Sequence[CityRow] | None = None,
         all_zones: Sequence[str] | None = None,
     ) -> None:
@@ -395,6 +426,7 @@ class TimezoneResolver:
             country_names if country_names is not None else load_country_names()
         )
         self._country_zones = dict(country_zones if country_zones is not None else load_country_zones())
+        self._regions = _build_region_index(regions if regions is not None else load_regions())
         self._cities = _build_city_index(cities if cities is not None else load_cities())
         self._all_zones = tuple(all_zones if all_zones is not None else load_all_zones())
 
@@ -451,7 +483,23 @@ class TimezoneResolver:
         groups = _equivalence_groups(zones, now, horizon_days)
         return _resolved_or_ambiguous([group[0] for group in groups])
 
-    # Step 5: cities -----------------------------------------------------------------------------------------
+    # Step 5: US, Canadian and Australian first-level regions -----------------------------------------------
+
+    def _region(self, text: str, now: datetime, horizon_days: int) -> Resolution:
+        region = _find_leftmost(
+            text,
+            _REGION_MAX_WORDS,
+            [(self._regions, False)],
+            min_single_word=3,
+            stopwords=_GEO_STOPWORDS,
+            require_capitalized=True,
+        )
+        if region is None:
+            return UNKNOWN_RESOLUTION
+        groups = _equivalence_groups(region.zones, now, horizon_days)
+        return _resolved_or_ambiguous([group[0] for group in groups])
+
+    # Step 6: cities -----------------------------------------------------------------------------------------
 
     def _city(self, text: str, now: datetime, horizon_days: int) -> Resolution:
         rows = _find_leftmost(
@@ -489,7 +537,7 @@ class TimezoneResolver:
         qualified = [r for r in others if r.admin1_name and _mentions_phrase(text, r.admin1_name)]
         return max(qualified, key=lambda r: r.population) if qualified else None
 
-    # The five steps, in order -----------------------------------------------------------------------------
+    # The six steps, in order -----------------------------------------------------------------------------
 
     def resolve(
         self,
@@ -499,9 +547,10 @@ class TimezoneResolver:
         horizon_days: int = DEFAULT_HORIZON_DAYS,
         include_geo: bool = True,
     ) -> Resolution:
-        """Resolve ``text`` against the five steps in order, stopping at the first that names a zone or
-        candidates. ``include_geo=False`` skips the country and city steps (used for a bare-token scan
-        of unstructured text, where a country or city match is more likely to be a false positive)."""
+        """Resolve ``text`` against the six steps in order, stopping at the first that names a zone or
+        candidates. ``include_geo=False`` skips the country, region and city steps (used for a
+        bare-token scan of unstructured text, where a geographic name match is more likely to be a
+        false positive)."""
         explicit = _explicit_iana(text)
         if explicit.status != "unknown":
             return explicit
@@ -516,6 +565,9 @@ class TimezoneResolver:
         country = self._country(text, now, horizon_days)
         if country.status != "unknown":
             return country
+        region = self._region(text, now, horizon_days)
+        if region.status != "unknown":
+            return region
         return self._city(text, now, horizon_days)
 
     # The pre-scan phrase detector (design-agent.md SSB.5) --------------------------------------------------
@@ -524,7 +576,7 @@ class TimezoneResolver:
         self, text: str, *, now: datetime, horizon_days: int = DEFAULT_HORIZON_DAYS
     ) -> tuple[str, Resolution] | None:
         """The zone statement in ``text``, if any: a lead-in phrase ("I'm in X", "we're on X", "calling
-        from X", "X time") resolved through all five steps, else a bare abbreviation, offset or IANA
+        from X", "X time") resolved through all six steps, else a bare abbreviation, offset or IANA
         name found anywhere in the text. ``None`` when nothing in ``text`` looks like a zone statement
         at all; a phrase that is found but names no known zone is not reported either, so the model's
         own ``resolve_timezone`` tool call is still the one that asks the prospect."""
