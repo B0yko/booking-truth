@@ -10,8 +10,8 @@ import typer
 from booking_truth import __version__
 from booking_truth.agent.cli import app as agent_app
 from booking_truth.doctor import register as register_doctor_command
+from booking_truth.evals.cli import register as register_eval_commands
 from booking_truth.harness.cli_test import register as register_test_commands
-from booking_truth.harness.evals.cli import register as register_eval_commands
 from booking_truth.harness.scenarios_cli import app as scenarios_app
 from booking_truth.sandbox.cli import app as sandbox_app
 from booking_truth.trace.validate import iter_jsonl, trace_errors

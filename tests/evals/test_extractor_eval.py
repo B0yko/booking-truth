@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from booking_truth.harness.evals.extractor_eval import (
+from booking_truth.evals.extractor_eval import (
     load_test_items,
     render_extractor_eval_md,
     run_extractor_eval,

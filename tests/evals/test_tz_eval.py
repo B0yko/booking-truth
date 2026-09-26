@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from booking_truth.agent.guards.tz.resolver import Resolution
-from booking_truth.harness.evals.tz_eval import (
+from booking_truth.evals.tz_eval import (
     load_test_items,
     render_tz_eval_md,
     run_tz_eval,

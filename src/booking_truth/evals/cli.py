@@ -11,8 +11,8 @@ from typing import Annotated, Any
 import typer
 
 from booking_truth.config import Settings, load_settings
-from booking_truth.harness.evals.extractor_eval import render_extractor_eval_md, run_extractor_eval
-from booking_truth.harness.evals.tz_eval import render_tz_eval_md, run_tz_eval
+from booking_truth.evals.extractor_eval import render_extractor_eval_md, run_extractor_eval
+from booking_truth.evals.tz_eval import render_tz_eval_md, run_tz_eval
 from booking_truth.harness.report import dumps
 from booking_truth.llm.client import OpenAICompatClient
 from booking_truth.llm.types import LLMError

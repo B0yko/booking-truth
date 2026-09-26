@@ -9,7 +9,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from booking_truth.cli import app
-from booking_truth.harness.evals.cli import EXTRACTOR_JSON, EXTRACTOR_MD, TZ_JSON, TZ_MD
+from booking_truth.evals.cli import EXTRACTOR_JSON, EXTRACTOR_MD, TZ_JSON, TZ_MD
 
 runner = CliRunner()
 NO_KEY = {"BT_LLM_API_KEY": "", "OPENROUTER_API_KEY": ""}
