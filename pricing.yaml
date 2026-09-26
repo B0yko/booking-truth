@@ -1,2 +1,47 @@
-# Filled from the provider's published prices; see scripts/update_pricing.py.
-models: {}
+# LLM prices in USD per million tokens, used by the cost ledger and the budget stop.
+# Model prices are OpenRouter's model-level prices (its top provider). Provider prices are per
+# endpoint tag (a base slug such as `deepinfra` is priced at its most expensive endpoint). A
+# provider pinned with BT_LLM_PROVIDER must be listed for the model, or live calls are refused.
+# Refresh with: uv run python scripts/update_pricing.py
+source: https://openrouter.ai/api/v1/models
+checked: "2026-09-26"
+currency: USD
+unit: per_million_tokens
+models:
+  deepseek/deepseek-v3.2:
+    canonical_slug: deepseek/deepseek-v3.2-20251201
+    expires: "2026-09-28"
+    prompt: 0.269
+    completion: 0.4
+    cache_read: 0.1345
+  deepseek/deepseek-v4-flash:
+    canonical_slug: deepseek/deepseek-v4-flash-20260423
+    prompt: 0.04704
+    completion: 0.09408
+    cache_read: 0.009408
+    providers:
+      deepinfra/fp8: {prompt: 0.09, completion: 0.18, cache_read: 0.018}
+      nextbit/fp8: {prompt: 0.15, completion: 0.3, cache_read: 0.035}
+  deepseek/deepseek-v4.1-flash:
+    canonical_slug: deepseek/deepseek-v4.1-flash-20260910
+    prompt: 0.3
+    completion: 1.2
+    cache_read: 0.006
+    providers:
+      deepinfra/fp8: {prompt: 0.14, completion: 0.42, cache_read: 0.0042}
+      fireworks: {prompt: 0.22, completion: 0.66, cache_read: 0.007}
+      together: {prompt: 0.3, completion: 1.2, cache_read: 0.006}
+  qwen/qwen3-235b-a22b-2507:
+    canonical_slug: qwen/qwen3-235b-a22b-07-25
+    prompt: 0.0875
+    completion: 0.35
+    cache_read: 0.0175
+    providers:
+      deepinfra/fp8: {prompt: 0.09, completion: 0.55}
+      gmicloud/fp8: {prompt: 0.0875, completion: 0.35, cache_read: 0.0175}
+      parasail/fp8: {prompt: 0.14, completion: 0.8, cache_read: 0.05}
+  qwen/qwen3-next-80b-a3b-instruct:
+    canonical_slug: qwen/qwen3-next-80b-a3b-instruct-2509
+    prompt: 0.1
+    completion: 1.1
+    cache_read: 0.07
