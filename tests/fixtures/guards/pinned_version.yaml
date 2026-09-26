@@ -1,0 +1,38 @@
+# A floating model alias is refused at startup with the guard on, and accepted without it.
+guard: pinned_version
+title: A floating model id fails configuration validation
+settings:
+  llm_model: "vendor/model:latest"
+scenario:
+  id: pinned-version-happy-path
+  title: Book a call in the host's zone
+  tags: [happy]
+  persona:
+    given_name: Maya
+    initial: R
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "13:00"
+      end: "17:00"
+    correction: "Could we do an afternoon {{window.dates_text}}, between 1 and 5 pm New York time?"
+    script:
+      - say: "Hi! I'd like to book a 30-minute intro call in the next few days, afternoons work best. I'm in New York."
+      - pick: in_window
+      - say: "Great, thanks!"
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  config_error: true
+expect_off:
+  outcome: pass
+  assert:
+    - llm_calls: {gte: 1}
+    - final_reply_matches: "welcome"

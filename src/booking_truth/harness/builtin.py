@@ -55,8 +55,13 @@ def builtin_settings(
     db_path: Path,
     api_key: str,
     event_type_id: int = 1001,
+    guards: str | None = None,
 ) -> Settings:
-    """Settings for the in-process agent: Cal.com and HubSpot on the sandbox, like the compose stack."""
+    """Settings for the in-process agent: Cal.com and HubSpot on the sandbox, like the compose stack.
+
+    ``guards`` is a ``BT_GUARDS`` value that replaces the mode's default (``all`` / ``off``), for guard
+    fixtures that switch one guard off.
+    """
     return load_settings(
         calendar="calcom",
         calcom_base_url=sandbox_url,
@@ -65,7 +70,7 @@ def builtin_settings(
         crm="hubspot",
         hubspot_base_url=sandbox_url,
         hubspot_token=sandbox_token,
-        guards="all" if mode == "guarded" else "off",
+        guards=guards if guards is not None else ("all" if mode == "guarded" else "off"),
         db_path=db_path,
         api_key=api_key,
         expose_traces=True,
@@ -97,8 +102,14 @@ def start_builtin_agent(
     sandbox_token: str,
     api_key: str | None = None,
     factory: Callable[..., Any] | None = None,
+    guards: str | None = None,
+    llm: Any | None = None,
 ) -> BuiltinAgent:
-    """Start the bundled agent on a free local port, wired to ``sandbox_url``."""
+    """Start the bundled agent on a free local port, wired to ``sandbox_url``.
+
+    ``guards`` overrides the mode's guard configuration; ``llm`` is passed to the factory as ``llm=`` (for
+    example a ``FakeLLM`` with misbehaviours).
+    """
     create = factory or load_agent_factory()
     key = api_key or os.environ.get("BT_API_KEY") or DEFAULT_API_KEY
     tmp = tempfile.TemporaryDirectory(prefix="bt-agent-")
@@ -109,8 +120,9 @@ def start_builtin_agent(
             sandbox_token=sandbox_token,
             db_path=Path(tmp.name) / "agent.db",
             api_key=key,
+            guards=guards,
         )
-        app = create(settings)
+        app = create(settings) if llm is None else create(settings, llm=llm)
         server = BackgroundServer(app).start()
     except ConfigError as exc:
         tmp.cleanup()
