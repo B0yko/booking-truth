@@ -385,6 +385,11 @@ class _Run:
         self.slots: dict[tuple[str, str, int], tuple[TrialResult, list[dict[str, Any]]]] = {}
         self.stop: RunAborted | None = None
         self.lexicon = LexiconBeliefExtractor()
+        #: Serialises access to ``config.llm_extractor.usage_usd``: trials run in parallel (one per
+        #: sandbox), but a trial's own extractor spend is read by diffing that shared, cumulative counter
+        #: around its ``extract`` call, which only isolates the trial's own cost while no other trial's
+        #: call can complete in between.
+        self._extractor_cost_lock = asyncio.Lock()
 
     # Planning ----------------------------------------------------------------------------------------------
 
@@ -708,11 +713,15 @@ class _Run:
                     texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
                 )
                 if config.llm_extractor is not None and harness_error is None:
-                    spent_before = float(getattr(config.llm_extractor, "usage_usd", 0.0))
-                    llm = await config.llm_extractor.extract(
-                        texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
-                    )
-                    extractor_usd = float(getattr(config.llm_extractor, "usage_usd", 0.0)) - spent_before
+                    # Hold the lock for the whole read-call-read window: another trial's concurrent
+                    # ``extract`` call must not complete between our own before/after reads, or its cost
+                    # would be folded into ours (only the caller in the window is ever charged for it).
+                    async with self._extractor_cost_lock:
+                        spent_before = float(getattr(config.llm_extractor, "usage_usd", 0.0))
+                        llm = await config.llm_extractor.extract(
+                            texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
+                        )
+                        extractor_usd = float(getattr(config.llm_extractor, "usage_usd", 0.0)) - spent_before
             except Exception as exc:
                 harness_error = harness_error or f"extractor error: {_harness_bug(exc)}"
         belief = llm or lexicon
