@@ -35,6 +35,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import httpx
 
 from booking_truth.agent import render
+from booking_truth.agent.guards.readback import read_back
 from booking_truth.agent.models import BookingAction, GuardEvent
 from booking_truth.agent.naive import error_text, naive_zone, resolve_naive
 from booking_truth.calendars.base import (
@@ -706,9 +707,36 @@ class ToolExecutor:
         return result
 
     async def _hook_verify(self, action: BookingAction, result: WriteOk) -> WriteStatus:
-        """Hook for ``claim_ledger``: read the booking back and record the ledger entry. ``trusted``: the
-        write result is taken as it is, with no read-back and no ledger entry."""
-        return "trusted"
+        """``claim_ledger``: read the write back (retrying for up to 5 seconds) and record it in the ledger as
+        ``verified`` or ``unverified``. Without the guard the write result is ``trusted`` as it is, with no
+        read-back and no ledger entry."""
+        if not self.on("claim_ledger"):
+            return "trusted"
+        booking = result.booking
+        checked = await read_back(self.deps.calendar, action, booking, self.ctx.lead_email)
+        status: Literal["verified", "unverified"] = "verified" if checked.confirmed else "unverified"
+        self.deps.store.claims.record(
+            lead_email=self.ctx.lead_email,
+            event_key=self.deps.calendar.event_key,
+            action=action,
+            booking_ref=booking.ref,
+            start_utc=booking.start,
+            end_utc=booking.end,
+            status=status,
+            zone=self.ctx.zone,
+            session_id=self.ctx.session_id,
+            channel=self.ctx.channel,
+            previous_ref=result.previous_ref,
+        )
+        reads = f"{checked.attempts} read{'s' if checked.attempts != 1 else ''}"
+        self.state.event("claim_ledger", status, f"{action} {booking.ref}: {checked.detail} ({reads})")
+        return status
+
+    def _hook_booking_gone(self, ref: str, why: str) -> None:
+        """``claim_ledger``: the calendar says a booking no longer exists or is already cancelled, so its
+        ledger entries stop supporting claims."""
+        if self.on("claim_ledger") and self.deps.store.claims.void(ref):
+            self.state.event("claim_ledger", "entry_voided", f"{ref}: {why}")
 
     async def _hook_after_write(self, record: WriteRecord, *, key: str | None) -> None:
         """Hook for ``idempotency`` bookkeeping after a successful write (commit the key; bump the lead's
@@ -812,6 +840,8 @@ class ToolExecutor:
             await self._hook_after_write(record, key=key)
             return ("unconfirmed" if status == "unverified" else "rescheduled"), record, ""
         if isinstance(result, WriteRejected):
+            if result.reason == "not_found":
+                self._hook_booking_gone(ref, "the calendar has no such booking")
             if result.reason in ("slot_taken", "not_found"):
                 return result.reason, None, result.detail
             return "rejected", None, result.detail
@@ -884,8 +914,10 @@ class ToolExecutor:
             return ("unconfirmed" if status == "unverified" else "cancelled"), record, ""
         if isinstance(result, WriteRejected):
             if result.reason == "not_found":
+                self._hook_booking_gone(ref, "the calendar has no such booking")
                 return "not_found", None, result.detail
             if result.reason == "duplicate":
+                self._hook_booking_gone(ref, "the booking was already cancelled")
                 return "already_cancelled", None, result.detail
             return "rejected", None, result.detail
         return "unknown", None, result.detail or result.reason

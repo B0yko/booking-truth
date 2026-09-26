@@ -221,7 +221,7 @@ async def test_book_slot_books_the_listed_slot(guarded: AgentEnv) -> None:
     assert [b["uid"] for b in bookings] == [result["booking_uid"]]
     assert bookings[0]["attendees"][0]["name"] == LEAD_NAME
     write = tools.state.writes[-1]
-    assert (write.action, write.status, write.booking.ref) == ("booked", "trusted", result["booking_uid"])
+    assert (write.action, write.status, write.booking.ref) == ("booked", "verified", result["booking_uid"])
     assert tools.state.last_book_start == write.booking.start
 
 
