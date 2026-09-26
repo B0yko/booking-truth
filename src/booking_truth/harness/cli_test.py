@@ -33,6 +33,7 @@ from booking_truth.harness.adapters import (
     HttpAgentClient,
     load_agent_config,
 )
+from booking_truth.harness.beliefs import BeliefExtractor
 from booking_truth.harness.builtin import (
     BUILTIN_TARGETS,
     BuiltinAgent,
@@ -40,6 +41,9 @@ from booking_truth.harness.builtin import (
     start_builtin_agent,
     start_sandbox,
 )
+from booking_truth.harness.llm_extractor import LLMExtractor
+from booking_truth.harness.llm_persona import LLMPersona
+from booking_truth.harness.personas import Persona
 from booking_truth.harness.report import (
     MANIFEST_FILE,
     REPORT_FILE,
@@ -52,9 +56,19 @@ from booking_truth.harness.report import (
     fmt_rate,
     regenerate,
 )
-from booking_truth.harness.runner import AgentUnderTest, Endpoint, RunAborted, RunConfig, RunResult, run
+from booking_truth.harness.runner import (
+    AgentUnderTest,
+    Endpoint,
+    PersonaFactory,
+    RunAborted,
+    RunConfig,
+    RunResult,
+    run,
+)
 from booking_truth.harness.sandbox_client import DEFAULT_TOKEN
-from booking_truth.harness.scenarios import ScenarioError, load_suite, select_scenarios
+from booking_truth.harness.scenarios import ResolvedScenario, ScenarioError, load_suite, select_scenarios
+from booking_truth.llm.client import OpenAICompatClient
+from booking_truth.llm.types import LLMError
 from booking_truth.serve import BackgroundServer
 
 EXIT_PASS, EXIT_FAILURES, EXIT_ABORTED = 0, 1, 2
@@ -453,20 +467,44 @@ def cmd_test(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(EXIT_ABORTED) from None
     offline = settings.offline
-    reason = (
-        "no LLM key configured"
-        if offline
-        else "LLM personas and the LLM belief extractor are not available in this version"
-    )
-    if not offline:
+    reason = "no LLM key configured"
+    persona_model_id = persona_model or settings.persona_model_id
+    extractor_model_id = extractor_model or settings.extractor_model_id
+    if offline:
         typer.echo(
             f"note: {reason}; grading offline with scripted personas and the lexicon extractor", err=True
+        )
+    else:
+        typer.echo(
+            f"note: LLM personas ({persona_model_id}) and the LLM belief extractor "
+            f"({extractor_model_id}) are active",
+            err=True,
         )
     started = datetime.now(UTC)
     run_id = out.name if out is not None else started.strftime("%Y%m%dT%H%M%SZ")
     out_dir = out if out is not None else Path("runs") / run_id
     resources = Resources()
+    persona_llm: OpenAICompatClient | None = None
+    extractor_llm: OpenAICompatClient | None = None
+    persona_factory: PersonaFactory | None = None
+    llm_extractor: BeliefExtractor | None = None
     try:
+        if not offline:
+            persona_llm = OpenAICompatClient.from_settings(
+                settings, component="persona", model=persona_model_id
+            )
+            extractor_llm = OpenAICompatClient.from_settings(
+                settings, component="extractor", model=extractor_model_id
+            )
+
+            def _make_persona(resolved: ResolvedScenario, supports_actions: bool) -> Persona:
+                assert persona_llm is not None
+                return LLMPersona(
+                    resolved, persona_llm, model=persona_model_id, supports_actions=supports_actions
+                )
+
+            persona_factory = _make_persona
+            llm_extractor = LLMExtractor(extractor_llm, model=extractor_model_id)
         config_model = load_agent_config(agent_config) if agent_config is not None else None
         pool_model = load_pool(pool) if pool is not None else None
         agents, token = build_agents(
@@ -496,10 +534,12 @@ def cmd_test(
             ledger_dir=settings.resolved_ledger_dir if settings.budget_usd is not None else None,
             dry_run=dry_run,
             offline_reason=reason,
-            persona_model=persona_model,
-            extractor_model=extractor_model,
+            persona_model=persona_model_id if persona_factory is not None else persona_model,
+            extractor_model=extractor_model_id if llm_extractor is not None else extractor_model,
             sandbox_token=token,
             only=only_list,
+            persona_factory=persona_factory,
+            llm_extractor=llm_extractor,
             command=reproduce_command(
                 specs=specs,
                 agent_config=agent_config,
@@ -519,8 +559,18 @@ def cmd_test(
             ),
             progress=typer.echo,
         )
-        result = asyncio.run(run(config))
-    except (UsageError, AgentConfigError, BuiltinUnavailable, ScenarioError) as exc:
+
+        async def _execute() -> RunResult:
+            try:
+                return await run(config)
+            finally:
+                if persona_llm is not None:
+                    await persona_llm.aclose()
+                if extractor_llm is not None:
+                    await extractor_llm.aclose()
+
+        result = asyncio.run(_execute())
+    except (UsageError, AgentConfigError, BuiltinUnavailable, ScenarioError, LLMError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(EXIT_ABORTED) from None
     except RunAborted as exc:
