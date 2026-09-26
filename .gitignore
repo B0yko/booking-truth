@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Local state and secrets
+.env
+*.db
+*.db-wal
+*.db-shm
+service-account*.json
+runs/
+ledger/
+
+# Node / widget tooling
+node_modules/
+widget/.tsbuild/
+
+# Playwright
+test-results/
+playwright-report/
+
+# OS
+.DS_Store

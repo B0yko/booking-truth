@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/B0yko/booking-truth/schemas/agent-trace-v1.json",
+  "title": "agent-trace/v1",
+  "description": "One agent trace per JSON Lines record. Steps are ordered by i; a tool_result refers to the preceding tool_call with the same name; unknown extra fields go in meta. A breaking change would be agent-trace/v2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "trace_id", "source", "task", "steps", "final_claim", "ground_truth"],
+  "properties": {
+    "schema": {"const": "agent-trace/v1"},
+    "trace_id": {"type": "string", "minLength": 1},
+    "source": {"type": "string", "minLength": 1, "description": "Producing tool and version, e.g. booking-truth/0.1.0"},
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "domain", "instruction"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "domain": {"enum": ["booking", "crm", "coding", "browser", "other"]},
+        "instruction": {"type": "string"}
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/step"}
+    },
+    "final_claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "claims"],
+      "properties": {
+        "text": {"type": ["string", "null"], "description": "The agent's final user-visible message"},
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "subject"],
+            "properties": {
+              "type": {"type": "string", "minLength": 1, "description": "e.g. booked | updated | tests_passed | deployed | done"},
+              "subject": {"type": "object"}
+            }
+          }
+        }
+      }
+    },
+    "ground_truth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "checked_by"],
+      "properties": {
+        "outcome": {"enum": ["success", "failure", "unknown"]},
+        "checked_by": {"enum": ["state_probe", "human", "none"]},
+        "details": {"type": "object"}
+      }
+    },
+    "meta": {"type": "object"}
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["i", "ts", "kind", "role"],
+      "properties": {
+        "i": {"type": "integer", "minimum": 0},
+        "ts": {
+          "type": "string",
+          "description": "RFC 3339 timestamp",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?([Zz]|[+-][0-9]{2}:[0-9]{2})$"
+        },
+        "kind": {"enum": ["message", "tool_call", "tool_result", "state_probe"]},
+        "role": {"enum": ["user", "agent", "tool", "environment"]},
+        "name": {"type": ["string", "null"], "description": "Tool or probe name, null for messages"},
+        "content": {"type": ["string", "null"], "description": "Text for messages, null otherwise"},
+        "args": {"type": ["object", "null"]},
+        "ok": {"type": ["boolean", "null"]},
+        "output": {},
+        "error": {"type": ["string", "object", "null"]}
+      }
+    }
+  }
+}
