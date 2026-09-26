@@ -78,9 +78,9 @@ from booking_truth.agent.tools import (
 from booking_truth.agent.version import load_prompt
 from booking_truth.calendars.base import CalendarAdapter
 from booking_truth.config import Settings
-from booking_truth.crm.base import ContactPayload, CrmAdapter, CrmOk, MeetingPayload
+from booking_truth.crm.base import ContactPayload, CrmAdapter, CrmOk, CrmSyncPayload, MeetingPayload
 from booking_truth.llm.types import LLM, ChatMessage, LLMError, ToolCall
-from booking_truth.store import Lead, LedgerEntry, Store, normalize_email
+from booking_truth.store import Lead, LedgerEntry, OutboxItem, Store, normalize_email
 from booking_truth.timeutil import Clock, iso_ms_z, iso_z, parse_iso
 from booking_truth.trace.validate import trace_errors
 
@@ -544,8 +544,59 @@ class AgentCore:
             result.set_final(f"{result.reply}\n\n{render.NEXT_STEP_HANDOFF}", result.claims)
 
     async def _hook_crm_outbox(self, ctx: TurnContext) -> None:
-        """Hook for ``crm_outbox``: queue a validated CRM payload for each verified write of the turn."""
-        return None
+        """Hook for ``crm_outbox``: queue a validated CRM payload for each verified write of the turn,
+        built from its ledger entry, never from the model's reply text. The HubSpot adapter and the
+        worker that drains this queue land in a later milestone; this hook only writes the outbox row.
+
+        A write with no verified ledger entry (``claim_ledger`` never confirmed it, or is off) is
+        skipped: nothing reaches the CRM through this hook without a verified calendar result. The
+        payload is validated again by :meth:`~booking_truth.store.repos.OutboxRepo.enqueue`, so a bad
+        one is refused rather than queued; that should not happen from ledgered data, and a guard event
+        marks it if it ever does. This runs after the turn's response is already built (design-agent.md
+        SSB.12), so — like the naive rule's own CRM calls — each queued item gets its own trace step
+        instead of a guard event on this turn's reply."""
+        steps: list[dict[str, Any]] = []
+        for write in ctx.state.writes:
+            if write.status != "verified":
+                continue
+            entry = self._ledger_entry(ctx, write)
+            if entry is None:
+                continue
+            try:
+                payload = CrmSyncPayload(
+                    action=write.action,
+                    lead_email=ctx.lead_email,
+                    lead_name=ctx.lead_name,
+                    booking_ref=entry.booking_ref,
+                    previous_ref=write.previous_ref if write.action == "rescheduled" else None,
+                    zone=valid_zone(entry.zone) or write.zone,
+                    start_utc=entry.start_utc,
+                    end_utc=entry.end_utc,
+                )
+            except ValidationError as exc:
+                ctx.state.event("crm_outbox", "invalid_payload", f"{write.action} {entry.booking_ref}: {exc}")
+                continue
+            item = self.store.outbox.enqueue(ctx.lead_email, "crm_sync", payload)
+            ctx.state.event("crm_outbox", "enqueued", f"{write.action} {entry.booking_ref}")
+            steps += self._outbox_step(item, payload)
+        if steps:
+            self.store.trace_steps.extend(ctx.session_id, steps)
+
+    def _outbox_step(self, item: OutboxItem, payload: CrmSyncPayload) -> list[dict[str, Any]]:
+        ts = iso_ms_z(self.deps.clock.now())
+        args = {"action": payload.action, "booking_ref": payload.booking_ref}
+        return [
+            {"ts": ts, "kind": "tool_call", "role": "agent", "name": "crm.outbox.enqueue", "args": args},
+            {
+                "ts": ts,
+                "kind": "tool_result",
+                "role": "tool",
+                "name": "crm.outbox.enqueue",
+                "ok": True,
+                "output": {"item_id": item.id, "status": item.status},
+                "error": None,
+            },
+        ]
 
     def _hook_confirmations(self, ctx: TurnContext) -> list[Confirmation]:
         """``rendered_confirmation``: the turn's verified writes in the order they happened, each with the

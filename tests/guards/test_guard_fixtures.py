@@ -25,6 +25,8 @@ async def test_guard_fixture(path: Path, mode: Mode) -> None:
     fixture = load_fixture(path)
     if fixture.calendar == "google":
         pytest.skip("the Google Calendar adapter is not part of this build yet")
+    if fixture.guard == "crm_outbox":
+        pytest.skip("the HubSpot adapter and the outbox delivery worker are not part of this build yet")
     expectation = fixture.expect_on if mode == "on" else fixture.expect_off
     observation = await run_fixture(fixture, mode)
     problems = failures(expectation, observation)

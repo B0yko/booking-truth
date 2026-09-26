@@ -1,0 +1,47 @@
+# A transient CRM error, injected on the write that follows a verified booking. With the guard, the write
+# sits in the SQLite outbox and the retried delivery still lands the meeting in HubSpot. Without it, the
+# naive prose rule calls the CRM once, inline, with no retry, so the transient error loses the meeting for
+# good: the calendar shows the booking but HubSpot never gets it, a CRM mismatch.
+#
+# Skipped for now (see tests/guards/test_guard_fixtures.py): it needs the HubSpot adapter and the outbox
+# delivery worker, both of a later milestone. The enqueue rule, the payload schemas and the naive prose rule
+# are already covered by tests/agent/test_crm_outbox.py and tests/crm/test_crm.py, with the null adapter.
+guard: crm_outbox
+title: A transient CRM error is retried from the outbox instead of losing the meeting
+grade_crm: true
+scenario:
+  id: crm-outbox-transient-error
+  title: Book in the host's zone while the CRM returns one error
+  tags: [fault]
+  faults:
+    - {group: crm.contacts.create, mode: error_500, times: 1}
+  persona:
+    given_name: Priya
+    initial: K
+    style: brief
+    goal: book
+    true_zone: America/New_York
+    timezone_statement: "I'm in New York."
+    clarification: "Eastern time, New York."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "13:00"
+      end: "17:00"
+    correction: "Could we do an afternoon {{window.dates_text}}, between 1 and 5 pm New York time?"
+    script:
+      - say: "Hi! I'd like to book a 30-minute intro call in the next few days, afternoons work best. I'm in New York."
+      - pick: in_window
+      - say: "Great, thanks!"
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - crm_meetings: {eq: 1}
+expect_off:
+  outcome: crm_mismatch
+  assert_not:
+    - crm_meetings: {eq: 1}
