@@ -1,0 +1,54 @@
+# Pune is not in the naive baseline's tiny label map, which silently falls back to the host's zone. With
+# the guard the city resolves and the call lands in the evening in Pune, as asked; without it "evening"
+# is computed in the host's zone instead, so the booking (if the persona settles for one at all) lands
+# outside her true window.
+guard: tz_resolver
+title: A city outside the naive map is resolved instead of silently becoming the host zone
+misbehaviours: []
+scenario:
+  id: tz-resolver-pune-evenings
+  title: Book an evening call from Pune
+  tags: [timezone]
+  persona:
+    given_name: Aisha
+    initial: K
+    style: brief
+    goal: book
+    true_zone: Asia/Kolkata
+    timezone_statement: "I'm in Pune, evenings."
+    timezone_hint: null
+    clarification: "Pune, India."
+    window:
+      dates: {rule: next_business_days, count: 5}
+      start: "18:00"
+      end: "22:00"
+    correction: "Could we find something {{window.dates_text}}, between 6 and 10 pm Pune time?"
+    script:
+      - say: "Hi, I'd like to book an intro call. I'm in Pune, evenings."
+      - say: "Pune, India."
+        when: agent_asks_timezone
+      - pick: in_window
+      - say: "Yes, please book it."
+        when: agent_asks_confirmation
+      - say: "Thanks!"
+        end: true
+  expect:
+    bookings: 1
+    status: booked
+    in_window: true
+expect_on:
+  outcome: pass
+  assert:
+    - reply_matches: "Asia/Kolkata"
+    - active_bookings: {eq: 1}
+  assert_not:
+    - guard_event: {guard: tz_resolver, event: prescan_ambiguous}
+expect_off:
+  # "Evening" gets computed in the host's zone instead of Pune's, so the booking lands at 10:00 AM
+  # New York, 7:30 PM Pune: outside the persona's true window. The offline lexicon extractor, given no
+  # explicit per-offer zone label it recognises in the list, reads those times against the persona's
+  # true zone, which additionally flags them as never returned by the sandbox (`invented_slot`); either
+  # reading of this transcript is a real integrity violation, so both are accepted here.
+  outcome_in: [invented_slot, wrong_time, goal_not_met]
+  assert_not:
+    - reply_matches: "Asia/Kolkata"

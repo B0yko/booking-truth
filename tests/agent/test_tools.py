@@ -19,7 +19,6 @@ from booking_truth.agent.tools import (
     EXPIRED_INSTRUCTION,
     UNAVAILABLE_INSTRUCTION,
     HandoffNotifier,
-    basic_zone_resolution,
     business_days,
     guarded_specs,
     naive_specs,
@@ -87,12 +86,6 @@ def test_spread_keeps_every_day_and_chronological_order() -> None:
 
 def test_business_days_skip_weekends() -> None:
     assert business_days(date(2026, 10, 2), 3) == [date(2026, 10, 5), date(2026, 10, 6), date(2026, 10, 7)]
-
-
-def test_the_basic_zone_resolution_never_falls_back_silently() -> None:
-    assert basic_zone_resolution("I'm on Europe/Berlin time").zone == "Europe/Berlin"
-    assert basic_zone_resolution("We're on CST").zone == "America/Chicago"
-    assert basic_zone_resolution("I'm in Kathmandu").status == "unknown"
 
 
 # find_slots ----------------------------------------------------------------------------------------------
@@ -436,7 +429,7 @@ async def test_naive_zone_resolution_falls_back_to_the_host_silently(naive: Agen
 
 async def test_guarded_zone_resolution_states_the_zone_or_says_unknown(guarded: AgentEnv) -> None:
     tools = executor(guarded)
-    unknown = await tools.run("resolve_timezone", {"text": "I'm in Kathmandu"})
+    unknown = await tools.run("resolve_timezone", {"text": "I'm on the moon"})
     assert unknown == {"status": "unknown"}
     assert guarded.deps.store.leads.get(LEAD) is None or guarded.deps.store.leads.get(LEAD).tz_zone is None  # type: ignore[union-attr]
     resolved = await tools.run("resolve_timezone", {"text": "I'm in Berlin"})
@@ -446,6 +439,20 @@ async def test_guarded_zone_resolution_states_the_zone_or_says_unknown(guarded: 
     assert resolved["statement"].startswith("I'll use Europe/Berlin (UTC+02:00)")
     assert tools.ctx.zone == "Europe/Berlin"
     assert tools.state.zone_changed
+
+
+async def test_guarded_zone_resolution_reaches_a_city_the_naive_map_does_not_know(
+    guarded: AgentEnv,
+) -> None:
+    """The real resolver (``tz_resolver``) replaces the placeholder that used to answer ``unknown``
+    for any city outside the naive baseline's tiny label map."""
+    tools = executor(guarded)
+    resolved = await tools.run("resolve_timezone", {"text": "I'm in Kathmandu"})
+    assert resolved["status"] == "resolved"
+    assert resolved["zone"] == "Asia/Kathmandu"
+    assert resolved["utc_offset"] == "UTC+05:45"
+    assert resolved["statement"].startswith("I'll use Asia/Kathmandu (UTC+05:45)")
+    assert tools.ctx.zone == "Asia/Kathmandu"
 
 
 async def test_handoff_creates_a_row(guarded: AgentEnv) -> None:

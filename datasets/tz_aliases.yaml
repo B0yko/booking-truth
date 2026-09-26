@@ -1,0 +1,201 @@
+# Curated time zone abbreviations and names for the tz_resolver guard.
+#
+# Each entry is either "resolved" (one dominant IANA zone: the reading almost everyone means) or
+# "ambiguous" (two or more IANA zones a reasonable person could mean, listed as candidates). The
+# resolver matches whole words or phrases, case-insensitively for a name written with any lower-case
+# letter ("Eastern time", "India Standard Time") and case-sensitively for a name written in all
+# capitals ("IST", "CST"), so a casual lower-case word ("ist", the German "is") never matches an
+# abbreviation. The longest match wins when more than one entry's text appears. Every zone below is
+# checked against the installed IANA tz database by tests/guards/tz/test_data.py.
+#
+# Sources: design-agent.md SS4/SSD (ambiguous set) and the IANA tz database's own abbreviation
+# tables (dominant US, EU and other regional readings).
+
+# Ambiguous: abbreviations and names used for two or more non-equivalent regions -------------------
+
+- text: IST
+  status: ambiguous
+  candidates: [Asia/Kolkata, Asia/Jerusalem, Europe/Dublin]
+- text: CST
+  status: ambiguous
+  candidates: [America/Chicago, Asia/Shanghai]
+- text: BST
+  status: ambiguous
+  candidates: [Europe/London, Asia/Dhaka]
+- text: AST
+  status: ambiguous
+  candidates: [America/Halifax, America/Puerto_Rico, Asia/Riyadh]
+- text: Atlantic time
+  status: ambiguous
+  candidates: [America/Halifax, America/Puerto_Rico]
+- text: PST
+  status: ambiguous
+  candidates: [America/Los_Angeles, Asia/Manila]
+- text: Mountain time
+  status: ambiguous
+  candidates: [America/Denver, America/Phoenix]
+- text: Australian Eastern Time
+  status: ambiguous
+  candidates: [Australia/Sydney, Australia/Brisbane]
+- text: Australian Central Time
+  status: ambiguous
+  candidates: [Australia/Adelaide, Australia/Darwin]
+
+# Resolved: one dominant reading -------------------------------------------------------------------
+
+# US mainland zones (design-agent.md SS4: "EST, ET, EDT, 'Eastern', 'Central time', CT, 'Pacific
+# time', PT and PDT refer to the US zones").
+- text: EST
+  status: resolved
+  zone: America/New_York
+- text: ET
+  status: resolved
+  zone: America/New_York
+- text: EDT
+  status: resolved
+  zone: America/New_York
+- text: Eastern
+  status: resolved
+  zone: America/New_York
+- text: Eastern time
+  status: resolved
+  zone: America/New_York
+- text: CT
+  status: resolved
+  zone: America/Chicago
+- text: CDT
+  status: resolved
+  zone: America/Chicago
+- text: Central time
+  status: resolved
+  zone: America/Chicago
+- text: MST
+  status: resolved
+  zone: America/Denver
+- text: MDT
+  status: resolved
+  zone: America/Denver
+- text: PT
+  status: resolved
+  zone: America/Los_Angeles
+- text: PDT
+  status: resolved
+  zone: America/Los_Angeles
+- text: Pacific time
+  status: resolved
+  zone: America/Los_Angeles
+- text: HST
+  status: resolved
+  zone: Pacific/Honolulu
+- text: Hawaii time
+  status: resolved
+  zone: Pacific/Honolulu
+- text: AKST
+  status: resolved
+  zone: America/Anchorage
+- text: AKDT
+  status: resolved
+  zone: America/Anchorage
+- text: Alaska time
+  status: resolved
+  zone: America/Anchorage
+
+# EU-wide zones (CET/CEST, EET/EEST and WET/WEST member states keep the same offset as each other).
+- text: CET
+  status: resolved
+  zone: Europe/Berlin
+- text: CEST
+  status: resolved
+  zone: Europe/Berlin
+- text: Central European
+  status: resolved
+  zone: Europe/Berlin
+- text: Central European time
+  status: resolved
+  zone: Europe/Berlin
+- text: EET
+  status: resolved
+  zone: Europe/Athens
+- text: EEST
+  status: resolved
+  zone: Europe/Athens
+- text: Eastern European
+  status: resolved
+  zone: Europe/Athens
+- text: Eastern European time
+  status: resolved
+  zone: Europe/Athens
+- text: WET
+  status: resolved
+  zone: Europe/Lisbon
+- text: WEST
+  status: resolved
+  zone: Europe/Lisbon
+- text: Western European
+  status: resolved
+  zone: Europe/Lisbon
+- text: Western European time
+  status: resolved
+  zone: Europe/Lisbon
+- text: MSK
+  status: resolved
+  zone: Europe/Moscow
+
+# Australia (design-agent.md SS4 names only the full phrases as ambiguous; the abbreviations name the
+# larger, DST-observing state).
+- text: AEST
+  status: resolved
+  zone: Australia/Sydney
+- text: AEDT
+  status: resolved
+  zone: Australia/Sydney
+- text: ACST
+  status: resolved
+  zone: Australia/Adelaide
+- text: ACDT
+  status: resolved
+  zone: Australia/Adelaide
+- text: AWST
+  status: resolved
+  zone: Australia/Perth
+
+# Other single-reading names and abbreviations that come up in scheduling.
+- text: JST
+  status: resolved
+  zone: Asia/Tokyo
+- text: HKT
+  status: resolved
+  zone: Asia/Hong_Kong
+- text: SGT
+  status: resolved
+  zone: Asia/Singapore
+- text: KST
+  status: resolved
+  zone: Asia/Seoul
+- text: ICT
+  status: resolved
+  zone: Asia/Bangkok
+- text: PKT
+  status: resolved
+  zone: Asia/Karachi
+- text: India Standard Time
+  status: resolved
+  zone: Asia/Kolkata
+- text: NPT
+  status: resolved
+  zone: Asia/Kathmandu
+- text: Nepal time
+  status: resolved
+  zone: Asia/Kathmandu
+- text: NZST
+  status: resolved
+  zone: Pacific/Auckland
+- text: NZDT
+  status: resolved
+  zone: Pacific/Auckland
+- text: Brasilia time
+  status: resolved
+  zone: America/Sao_Paulo
+- text: GMT
+  status: resolved
+  zone: Etc/GMT

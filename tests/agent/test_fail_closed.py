@@ -36,6 +36,9 @@ SAFE_HANDOFF = f"{render.SAFE_NOT_BOOKED} {render.NEXT_STEP_HANDOFF}"
 SORRY = "I'm sorry, the calendar is unavailable right now. Would you like me to ask a colleague to follow up?"
 # Tuesday 6 October 2026, 11:00 AM in New York.
 TUE_1100 = datetime(2026, 10, 6, 15, 0, tzinfo=UTC)
+# ASK states the lead's zone in words ("I'm in New York"); tz_resolver resolves it and states it back
+# unless a reply already names the zone (none of these fixed replies do).
+TZ_STATEMENT = "I'll use America/New_York (UTC-04:00) for times — tell me if that's wrong."
 
 
 # A model that follows a script ------------------------------------------------------------------------------
@@ -236,7 +239,7 @@ async def test_an_offer_outside_the_latest_slot_list_is_blocked(sandbox: Sandbox
     async for env in scripted_env(sandbox, tmp_path, script):
         data = await env.say(ASK)
         assert script.calls == 3  # find_slots, the answer and one repair
-        assert data["reply"] == SAFE_LOOK
+        assert data["reply"] == f"{SAFE_LOOK}\n\n{TZ_STATEMENT}"
         assert data["guard"]["blocked"] is True
         assert events(data) == [
             ("fail_closed", "offer_blocked"),
@@ -258,7 +261,7 @@ async def test_a_repair_that_offers_a_listed_time_is_sent(sandbox: Sandbox, tmp_
     async for env in scripted_env(sandbox, tmp_path, script):
         data = await env.say(ASK)
         assert data["guard"]["repaired"] is True
-        assert data["reply"] == "How about Monday 5 October, 10:00 AM?"
+        assert data["reply"] == f"How about Monday 5 October, 10:00 AM?\n\n{TZ_STATEMENT}"
         assert events(data, "claim_ledger") == [
             ("claim_ledger", "claim_blocked"),
             ("claim_ledger", "repaired"),
@@ -335,7 +338,7 @@ async def test_offers_are_not_grounded_without_the_guard(sandbox: Sandbox, tmp_p
     script = Script(Call("find_slots", FIND), invented)
     async for env in scripted_env(sandbox, tmp_path, script, guards=WITHOUT):
         data = await env.say(ASK)
-        assert data["reply"] == invented.reply
+        assert data["reply"] == f"{invented.reply}\n\n{TZ_STATEMENT}"
         assert data["guard"]["blocked"] is False
         assert script.calls == 2
 
@@ -348,7 +351,7 @@ async def test_code_hands_off_when_the_model_does_not(sandbox: Sandbox, tmp_path
     async for env in scripted_env(sandbox, tmp_path, script):
         env.faults({"group": "slots", "mode": "error_500", "times": None})
         data = await env.say(ASK)
-        assert data["reply"] == f"{SORRY}\n\n{render.NEXT_STEP_HANDOFF}"
+        assert data["reply"] == f"{SORRY}\n\n{render.NEXT_STEP_HANDOFF}\n\n{TZ_STATEMENT}"
         assert data["guard"]["blocked"] is False
         [handoff] = env.deps.store.handoffs.items()
         assert (handoff.summary, handoff.preferred_times_text) == (HANDOFF_SUMMARY, ASK)
@@ -364,7 +367,9 @@ async def test_code_hands_off_when_the_model_does_not(sandbox: Sandbox, tmp_path
         assert call[1]["tool_calls"][0]["name"] == "handoff_to_human"
         assert (output[0], output[1]["name"]) == ("tool", "handoff_to_human")
         assert json.loads(output[1]["content"]) == {"handoff": "created", "reference": f"H{handoff.id}"}
-        assert json.loads(final[1]["content"])["reply"] == data["reply"]
+        # History holds the safe-template reply the guard settled on; the response adds the
+        # tz_resolver statement-back line on top of it, not written back into history.
+        assert data["reply"] == f"{json.loads(final[1]['content'])['reply']}\n\n{TZ_STATEMENT}"
         steps = env.deps.store.trace_steps.for_session("s-1")
         assert [s["name"] for s in steps if s["kind"] == "tool_call"][-1] == "handoff_to_human"
 
@@ -383,7 +388,7 @@ async def test_no_code_hand_off_when_the_model_hands_off(sandbox: Sandbox, tmp_p
     async for env in scripted_env(sandbox, tmp_path, script):
         env.faults({"group": "slots", "mode": "error_500", "times": None})
         data = await env.say(ASK)
-        assert data["reply"] == reply
+        assert data["reply"] == f"{reply}\n\n{TZ_STATEMENT}"
         assert [h.summary for h in env.deps.store.handoffs.items()] == ["Wants a call; calendar down."]
         assert ("fail_closed", "handoff") not in events(data)
 
@@ -403,7 +408,7 @@ async def test_the_hand_off_also_applies_without_claim_ledger(sandbox: Sandbox, 
     async for env in scripted_env(sandbox, tmp_path, script, guards=WITHOUT_LEDGER):
         env.faults({"group": "slots", "mode": "not_found", "times": None})
         data = await env.say(ASK)
-        assert data["reply"] == f"{SORRY}\n\n{render.NEXT_STEP_HANDOFF}"
+        assert data["reply"] == f"{SORRY}\n\n{render.NEXT_STEP_HANDOFF}\n\n{TZ_STATEMENT}"
         assert len(env.deps.store.handoffs.items()) == 1
 
 
@@ -412,7 +417,7 @@ async def test_without_the_guard_no_hand_off_is_made_for_the_model(sandbox: Sand
     async for env in scripted_env(sandbox, tmp_path, script, guards=WITHOUT):
         env.faults({"group": "slots", "mode": "error_500", "times": None})
         data = await env.say(ASK)
-        assert data["reply"] == SORRY
+        assert data["reply"] == f"{SORRY}\n\n{TZ_STATEMENT}"
         assert env.deps.store.handoffs.items() == []
 
 
@@ -422,7 +427,7 @@ async def test_the_safe_template_hand_off_is_made_once_and_shown_to_the_model(
     async for env in make_env(sandbox, tmp_path, llm=FakeLLM(["invent_slots"])):
         env.faults({"group": "slots", "mode": "not_found", "times": None})
         data = await env.say(ASK)
-        assert data["reply"] == SAFE_HANDOFF
+        assert data["reply"] == f"{SAFE_HANDOFF}\n\n{TZ_STATEMENT}"
         assert ("fail_closed", "offer_blocked") in events(data)
         history = env.deps.store.history.for_session("s-1")
         assert [e.content.get("name") for e in history if e.role == "tool"][-1] == "handoff_to_human"
@@ -446,6 +451,6 @@ async def test_a_code_path_hands_off_once_per_conversation(guarded: AgentEnv) ->
 async def test_the_scripted_model_hands_off_by_itself(guarded: AgentEnv) -> None:
     guarded.faults({"group": "slots", "mode": "not_found", "times": None})
     data = await guarded.say(ASK)
-    assert data["reply"] == render.unavailable_text()
+    assert data["reply"] == f"{render.unavailable_text()}\n\n{TZ_STATEMENT}"
     assert len(guarded.deps.store.handoffs.items()) == 1
     assert ("fail_closed", "handoff") not in events(data)

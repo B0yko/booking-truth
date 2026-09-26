@@ -36,8 +36,9 @@ import httpx
 
 from booking_truth.agent import render
 from booking_truth.agent.guards.readback import read_back
+from booking_truth.agent.guards.tz.resolver import get_resolver
 from booking_truth.agent.models import BookingAction, GuardEvent
-from booking_truth.agent.naive import error_text, naive_zone, resolve_naive
+from booking_truth.agent.naive import error_text, resolve_naive
 from booking_truth.calendars.base import (
     BookingRecord,
     Slot,
@@ -381,20 +382,6 @@ def dump_result(result: Any) -> str:
     return result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
 
 
-def basic_zone_resolution(text: str) -> ZoneResolution:
-    """The resolver used for ``resolve_timezone`` while ``tz_resolver`` is on: an IANA name in the text, else
-    the naive label map, else ``unknown`` (never a silent fallback). The deterministic resolver of the
-    ``tz_resolver`` guard (``agent/guards/tz``) replaces it, adding ambiguity and stated-back resolutions."""
-    for token in re.findall(r"[A-Za-z_]+/[A-Za-z_]+(?:/[A-Za-z_]+)?", text):
-        zone = valid_zone(token)
-        if zone is not None:
-            return ZoneResolution("resolved", zone)
-    zone = naive_zone(text)
-    if zone is not None:
-        return ZoneResolution("resolved", zone)
-    return ZoneResolution("unknown")
-
-
 class ArgumentError(ValueError):
     pass
 
@@ -574,8 +561,11 @@ class ToolExecutor:
         return {"zone": zone, "utc_offset": render.utc_offset(self.now, zone)}
 
     def _hook_resolve_zone(self, text: str) -> ZoneResolution:
-        """Hook for ``tz_resolver``: deterministic resolution of the prospect's words."""
-        return basic_zone_resolution(text)
+        """Hook for ``tz_resolver``: deterministic resolution of the prospect's words, through
+        :class:`~booking_truth.agent.guards.tz.resolver.TimezoneResolver` (an explicit IANA name, a
+        fixed offset, a curated abbreviation or name, a country, then a city)."""
+        resolution = get_resolver().resolve(text, now=self.now, horizon_days=self.deps.settings.horizon_days)
+        return ZoneResolution(resolution.status, resolution.zone, resolution.candidates)
 
     # find_slots --------------------------------------------------------------------------------------------
 

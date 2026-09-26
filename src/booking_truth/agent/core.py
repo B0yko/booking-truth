@@ -43,6 +43,7 @@ from booking_truth.agent.guards.fail_closed import (
     offer_reference,
     unavailable_now,
 )
+from booking_truth.agent.guards.tz.resolver import get_resolver
 from booking_truth.agent.loop import (
     AGENT_TEMPERATURE,
     MAX_TOKENS,
@@ -277,9 +278,35 @@ class AgentCore:
         yield
 
     def _hook_tz_prescan(self, text: str, ctx: TurnContext) -> str | None:
-        """Hook for ``tz_resolver``: resolve a zone the prospect states in ``text`` (or state back the
-        browser hint) before the model runs; returns the statement-back line to add to the reply."""
+        """Hook for ``tz_resolver``: resolve a zone the prospect states in ``text`` before the model
+        runs (design-agent.md SSB.5). A resolved statement updates the lead's zone (source ``stated``)
+        and is returned to state back; an ambiguous one offers ``confirm_timezone`` quick replies
+        (``ctx.state.tz_candidates``, rendered by :meth:`_quick_replies`) and states nothing back yet,
+        so the model's own ``resolve_timezone`` call still asks the question. With no statement in
+        ``text`` at all, a browser hint already in use as ``ctx.zone`` is stated back instead, every
+        turn it is still the only zone known, until a stated or confirmed zone replaces it."""
+        detected = get_resolver().prescan(text, now=ctx.now, horizon_days=self.settings.horizon_days)
+        if detected is not None:
+            phrase, resolution = detected
+            if resolution.status == "resolved" and resolution.zone is not None:
+                self._set_lead_zone(ctx, resolution.zone, source="stated")
+                return render.zone_statement(resolution.zone, ctx.now)
+            if resolution.status == "ambiguous":
+                ctx.state.tz_candidates = list(resolution.candidates)
+                ctx.state.event("tz_resolver", "prescan_ambiguous", phrase)
+                return None
+        if ctx.zone_source == "browser_hint":
+            return render.zone_statement(ctx.zone, ctx.now, browser=True)
         return None
+
+    def _set_lead_zone(self, ctx: TurnContext, zone: str, *, source: str) -> None:
+        """Store a zone the pre-scan resolved and update ``ctx`` for the rest of the turn; a zone the
+        prospect already confirmed stays confirmed when the pre-scan finds the same one again (the
+        same rule :meth:`~booking_truth.agent.tools.ToolExecutor._set_zone` uses for the tool path)."""
+        if zone == ctx.zone and ctx.zone_source == "confirmed":
+            return
+        self.store.leads.set_zone(ctx.lead_email, zone, source=source, confirmed=False)
+        ctx.zone, ctx.zone_source = zone, source
 
     async def _hook_claim_check(
         self,
