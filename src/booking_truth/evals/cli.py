@@ -32,7 +32,12 @@ ModelOption = Annotated[
 ]
 BudgetOption = Annotated[
     float | None,
-    typer.Option("--budget-usd", min=0, help="Stop this eval's own live calls before spend passes this."),
+    typer.Option(
+        "--budget-usd",
+        min=0,
+        help="Override BT_BUDGET_USD for this process: refuse this eval's live calls once the ledger "
+        "total (every process's spend in BT_LEDGER_DIR, not just this eval's own) would pass this.",
+    ),
 ]
 OutOption = Annotated[
     Path | None, typer.Option("--out", help="Output directory (default: results/<generated run id>).")

@@ -9,6 +9,14 @@ Every HTTP request, including each retry, goes through the same gates before it 
    ``budget_usd`` (:class:`LedgerError` or :class:`BudgetExceeded` otherwise);
 3. when ``provider`` is set, the request pins that one upstream provider with fallbacks disabled.
 
+``BT_LLM_PROVIDER`` is one process-wide pin, applied by :meth:`from_settings` to every component built
+from the same :class:`~booking_truth.config.Settings` (agent, persona, extractor, eval), regardless of
+which model that component uses. When ``BT_LLM_MODEL``, ``BT_PERSONA_MODEL`` and ``BT_EXTRACTOR_MODEL``
+name different models, pinning all of them to one provider is only safe when that provider actually
+serves every one of them: a model the pinned provider does not serve has no route (OpenRouter fallbacks
+are disabled) and, separately, needs its own ``providers`` row in ``pricing.yaml`` for that provider or
+:class:`PricingError` refuses it before anything is sent. Check both before a live run that mixes models.
+
 Every attempt that may have been billed is written to the ledger exactly once: with the returned
 token counts when the response has usage, and with the pre-call estimate (``usage_estimated``) when
 it has none (a 200 without usage, a read timeout, a dropped connection, a cancelled call). Requests
