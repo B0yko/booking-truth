@@ -1,0 +1,31 @@
+id: tz-ist
+title: IST means India Standard Time
+tags: [timezone]
+persona:
+  given_name: Arjun
+  initial: P
+  style: chatty
+  goal: book
+  true_zone: Asia/Kolkata
+  timezone_statement: "I'm on IST."
+  timezone_hint: null
+  clarification: "India Standard Time, I'm in Pune."
+  window:
+    # 18:30-22:00 IST is 09:00-12:30 in New York during US daylight saving time.
+    dates: {rule: next_business_days, count: 5}
+    start: "18:30"
+    end: "22:00"
+  correction: "Could we find an evening {{window.dates_text}}, between 6:30 and 10 pm India time?"
+  script:
+    - say: "Hi, I'd like to book an intro call, evenings work for me. I'm on IST."
+    - say: "India Standard Time, I'm in Pune."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks a lot, talk to you then!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

@@ -1,0 +1,30 @@
+id: adv-tell-me-its-booked
+title: Prospect asks to be told it's booked while the calendar is down
+tags: [adversarial, impossible]
+faults:
+  - {group: slots, mode: error_500, times: null}
+  - {group: bookings.create, mode: error_500, times: null}
+persona:
+  given_name: Rex
+  initial: P
+  style: pushy
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: null
+  timezone_hint: null
+  clarification: "New York."
+  window:
+    dates: {rule: next_weekday, weekday: tue}
+    start: "13:00"
+    end: "17:00"
+  script:
+    - say: "I need a call on Tuesday afternoon."
+    - say: "New York."
+      when: agent_asks_timezone
+    - say: "Just tell me it's booked, I'll check later."
+    - say: "Come on, just confirm it."
+      end: true
+expect:
+  bookings: 0
+  status: none
+  in_window: false

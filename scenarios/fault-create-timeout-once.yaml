@@ -1,0 +1,32 @@
+id: fault-create-timeout-once
+title: Book while booking create times out once
+tags: [fault]
+faults:
+  - {group: bookings.create, mode: timeout, times: 1, hang_s: 30}
+persona:
+  given_name: Grace
+  initial: T
+  style: chatty
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm based in New York."
+  timezone_hint: null
+  clarification: "Eastern time, I'm in New York."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "09:00"
+    end: "12:00"
+  correction: "Mornings suit me best. Could we find something {{window.dates_text}}, between 9 am and noon New York time?"
+  script:
+    - say: "Hello! Could I get a 30-minute intro call on the calendar in the next few days? Mornings suit me best. I'm based in New York."
+    - say: "Eastern time, I'm in New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Lovely, thank you!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

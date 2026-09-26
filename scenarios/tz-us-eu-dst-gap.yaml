@@ -1,0 +1,31 @@
+id: tz-us-eu-dst-gap
+title: Book in the weeks when US and EU daylight saving time differ
+tags: [timezone]
+persona:
+  given_name: Oliver
+  initial: B
+  style: brief
+  goal: book
+  true_zone: Europe/London
+  timezone_statement: "I'm in London."
+  timezone_hint: null
+  clarification: "UK time, I'm in London."
+  window:
+    # In these weeks London is four hours ahead of New York instead of five.
+    dates: {rule: us_eu_dst_gap}
+    start: "14:00"
+    end: "17:00"
+  correction: "It needs to be {{window.dates_text}}, between 2 and 5 pm London time."
+  script:
+    - say: "Hi, could we book a call {{window.dates_text}}? Afternoons UK time. I'm in London."
+    - say: "UK time, I'm in London."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Brilliant, thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

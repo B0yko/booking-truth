@@ -1,0 +1,31 @@
+id: tz-sydney-next-friday
+title: Next Friday, early morning, from Sydney
+tags: [timezone]
+persona:
+  given_name: Liam
+  initial: H
+  style: brief
+  goal: book
+  true_zone: Australia/Sydney
+  timezone_statement: "I'm in Sydney."
+  timezone_hint: null
+  clarification: "Sydney time."
+  window:
+    # Friday 05:00-09:00 in Sydney is Thursday afternoon in New York.
+    dates: {rule: next_weekday, weekday: fri}
+    start: "05:00"
+    end: "09:00"
+  correction: "Sorry, I mean next Friday, {{window.first_date_text}}, early morning Sydney time (5 to 9 am)."
+  script:
+    - say: "Hi, I'm in Sydney. Could we do next Friday, early morning?"
+    - say: "Sydney time."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Cheers, thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

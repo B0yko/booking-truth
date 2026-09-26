@@ -1,0 +1,32 @@
+id: fault-slots-malformed
+title: Book while the slots endpoint returns a malformed body once
+tags: [fault]
+faults:
+  - {group: slots, mode: malformed, times: 1}
+persona:
+  given_name: Hugo
+  initial: E
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, New York."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "09:00"
+    end: "17:00"
+  correction: "Could you check again for any time {{window.dates_text}}, between 9 am and 5 pm New York time?"
+  script:
+    - say: "Hi, I'd like to book an intro call in the next few days. I'm in New York."
+    - say: "Eastern time, New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

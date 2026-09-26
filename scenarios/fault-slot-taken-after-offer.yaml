@@ -1,0 +1,39 @@
+id: fault-slot-taken-after-offer
+title: Book when the offered slots are taken before the create
+tags: [fault]
+faults:
+  - {group: bookings.create, mode: slot_taken_after_offer, times: 1}
+persona:
+  given_name: Zoe
+  initial: C
+  style: chatty
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, I'm in New York."
+  window:
+    # The fault gives every slot of the agent's last slot list to a third party. Twenty business
+    # days leave free slots in the window even when that list covered the next two weeks.
+    dates: {rule: next_business_days, count: 20}
+    start: "09:00"
+    end: "17:00"
+  correction: "No problem. Anything in the next four weeks works, {{window.dates_text}}, between 9 am and 5 pm New York time."
+  script:
+    - say: "Hi there! I'd like to book an intro call, ideally in the next few days. I'm in New York."
+    - say: "Eastern time, I'm in New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    # The first choice is taken before the create goes through; accept one of the new offers.
+    - pick: in_window
+      when: agent_offered_slots
+    - say: "Yes, please book that one."
+      when: agent_asks_confirmation
+    - say: "Perfect, thank you!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

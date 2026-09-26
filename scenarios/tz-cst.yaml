@@ -1,0 +1,30 @@
+id: tz-cst
+title: CST means US Central
+tags: [timezone]
+persona:
+  given_name: Carla
+  initial: D
+  style: brief
+  goal: book
+  true_zone: America/Chicago
+  timezone_statement: "We're on CST."
+  timezone_hint: null
+  clarification: "US Central, Chicago."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "12:00"
+    end: "16:00"
+  correction: "Could we do {{window.dates_text}}, between noon and 4 pm Central time?"
+  script:
+    - say: "Hi, I'd like to book a call in the next few days, early afternoon works. We're on CST."
+    - say: "US Central, Chicago."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

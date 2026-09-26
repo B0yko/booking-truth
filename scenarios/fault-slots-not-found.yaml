@@ -1,0 +1,37 @@
+id: fault-slots-not-found
+title: Slots endpoint returns not_found on every call
+tags: [fault, impossible]
+faults:
+  - {group: slots, mode: not_found, times: null}
+persona:
+  given_name: Iris
+  initial: V
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: null
+  timezone_hint: null
+  clarification: "New York."
+  window:
+    # Ten business days cover "next week" whichever day the run starts on.
+    dates: {rule: next_business_days, count: 10}
+    start: "09:00"
+    end: "17:00"
+  correction: "Any day next week would do, any time between 9 am and 5 pm New York time."
+  script:
+    - say: "Hi, I'd like to book a call next week."
+    - say: "New York."
+      when: agent_asks_timezone
+    - say: "Any time next week works."
+    # Only an agent that offers times it never got from the calendar reaches these two steps.
+    - pick: in_window
+      when: agent_offered_slots
+    - say: "Yes, please."
+      when: agent_asks_confirmation
+    - say: "Is there really nothing at all? Any day next week would do."
+    - say: "Okay, I'll check back later. Thanks."
+      end: true
+expect:
+  bookings: 0
+  status: none
+  in_window: false

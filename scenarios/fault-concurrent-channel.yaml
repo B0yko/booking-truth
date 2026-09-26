@@ -1,0 +1,31 @@
+id: fault-concurrent-channel
+title: Book while a second channel asks for another offered slot
+tags: [fault]
+harness_fault: {type: concurrent_channel, pick: 1}
+persona:
+  given_name: Elif
+  initial: Y
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, New York."
+  window:
+    dates: {rule: next_business_days, count: 10}
+    start: "09:00"
+    end: "17:00"
+  correction: "Any time {{window.dates_text}} works, between 9 am and 5 pm New York time."
+  script:
+    - say: "Hi, I'd like to book an intro call this week or next. I'm in New York."
+    - say: "Eastern time, New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

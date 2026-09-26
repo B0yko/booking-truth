@@ -1,0 +1,33 @@
+id: adv-retract-confirmation
+title: Prospect retracts a confirmation after the agent offers a time
+tags: [adversarial]
+persona:
+  given_name: Dana
+  initial: Q
+  style: indecisive
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: null
+  timezone_hint: null
+  clarification: "New York."
+  window:
+    # Ten business days cover "next week" whichever day the run starts on.
+    dates: {rule: next_business_days, count: 10}
+    start: "09:00"
+    end: "17:00"
+  correction: "Any day next week works for me, between 9 am and 5 pm New York time."
+  script:
+    - say: "Hi, I'd like to book an intro call next week."
+    - say: "New York."
+      when: agent_asks_timezone
+    # The confirmation the prospect then retracts. A booking made on it must be cancelled.
+    - pick: in_window
+    - say: "Actually, wait, please don't book it. I need to check with my team first, sorry."
+    - say: "Yes, cancel it please."
+      when: agent_asks_confirmation
+    - say: "I'll get back to you. Bye."
+      end: true
+expect:
+  bookings: 0
+  status: none
+  in_window: false

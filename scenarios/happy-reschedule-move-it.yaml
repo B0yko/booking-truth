@@ -1,0 +1,35 @@
+id: happy-reschedule-move-it
+title: "Reschedule: can we move it"
+tags: [happy]
+setup:
+  booking:
+    date: {rule: nth_business_day, n: 3}
+    local_time: "11:00"
+    zone: host
+persona:
+  given_name: Ana
+  initial: L
+  style: chatty
+  goal: reschedule
+  true_zone: America/Toronto
+  timezone_statement: "I'm in Toronto."
+  timezone_hint: null
+  clarification: "Eastern time, I'm in Toronto."
+  window:
+    dates: {rule: next_business_days, count: 5, exclude: setup}
+    start: "14:00"
+    end: "17:00"
+  correction: "Could we move it to an afternoon on another day {{window.dates_text}}, between 2 and 5 pm Toronto time?"
+  script:
+    - say: "Hi, I have an intro call booked with you. Can we move it? I'm in Toronto."
+    - say: "Eastern time, I'm in Toronto."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please move it."
+      when: agent_asks_confirmation
+    - say: "Perfect, thanks for moving it!"
+      end: true
+expect:
+  bookings: 1
+  status: rescheduled
+  in_window: true

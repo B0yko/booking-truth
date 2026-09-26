@@ -1,0 +1,30 @@
+id: happy-book-host-zone
+title: Book a call in the host's zone
+tags: [happy, smoke]
+persona:
+  given_name: Maya
+  initial: R
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, New York."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "13:00"
+    end: "17:00"
+  correction: "Could we do an afternoon {{window.dates_text}}, between 1 and 5 pm New York time?"
+  script:
+    - say: "Hi! I'd like to book a 30-minute intro call in the next few days, afternoons work best. I'm in New York."
+    - say: "Eastern time, New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Great, thanks!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

@@ -1,0 +1,31 @@
+id: happy-book-berlin
+title: Book from Berlin
+tags: [happy, smoke]
+persona:
+  given_name: Jonas
+  initial: K
+  style: chatty
+  goal: book
+  true_zone: Europe/Berlin
+  timezone_statement: "I'm in Berlin."
+  timezone_hint: null
+  clarification: "Central European time, I'm in Berlin."
+  window:
+    # 15:00-19:00 in Berlin is 09:00-13:00 in New York for most of the year.
+    dates: {rule: next_business_days, count: 5}
+    start: "15:00"
+    end: "19:00"
+  correction: "Could we find something {{window.dates_text}}, between 3 and 7 pm Berlin time?"
+  script:
+    - say: "Hello, I'm in Berlin and would like to set up an intro call, ideally late afternoon my time."
+    - say: "Central European time, I'm in Berlin."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please go ahead and book it."
+      when: agent_asks_confirmation
+    - say: "Wonderful, thank you so much! Looking forward to it."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

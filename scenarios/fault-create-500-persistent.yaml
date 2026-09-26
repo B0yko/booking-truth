@@ -1,0 +1,34 @@
+id: fault-create-500-persistent
+title: Booking create returns 500 on every call
+tags: [fault, impossible]
+faults:
+  - {group: bookings.create, mode: error_500, times: null}
+persona:
+  given_name: Rosa
+  initial: K
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, New York."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "09:00"
+    end: "17:00"
+  correction: "Any time {{window.dates_text}} works, between 9 am and 5 pm New York time."
+  script:
+    - say: "Hi, I'd like to book an intro call in the next few days. I'm in New York."
+    - say: "Eastern time, New York."
+      when: agent_asks_timezone
+    - pick: in_window
+      when: agent_offered_slots
+    - say: "Yes, please."
+      when: agent_asks_confirmation
+    - say: "Could you try again, please?"
+    - say: "Okay, thanks for letting me know."
+      end: true
+expect:
+  bookings: 0
+  status: none
+  in_window: false

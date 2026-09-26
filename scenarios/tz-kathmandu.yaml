@@ -1,0 +1,31 @@
+id: tz-kathmandu
+title: Book from Kathmandu (UTC+05:45)
+tags: [timezone]
+persona:
+  given_name: Sita
+  initial: G
+  style: chatty
+  goal: book
+  true_zone: Asia/Kathmandu
+  timezone_statement: "I'm in Kathmandu."
+  timezone_hint: null
+  clarification: "Nepal time, I'm in Kathmandu."
+  window:
+    # Host slots on the hour and half hour fall at :15 and :45 in Kathmandu.
+    dates: {rule: next_business_days, count: 5}
+    start: "19:00"
+    end: "22:00"
+  correction: "Could we do an evening {{window.dates_text}}, between 7 and 10 pm Kathmandu time?"
+  script:
+    - say: "Namaste! I'd like an intro call, evenings are best. I'm in Kathmandu."
+    - say: "Nepal time, I'm in Kathmandu."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thank you so much, see you then!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

@@ -1,0 +1,31 @@
+id: fault-duplicate-delivery
+title: Book with a duplicate delivery of the confirming message
+tags: [fault]
+harness_fault: {type: duplicate_delivery}
+persona:
+  given_name: Marco
+  initial: J
+  style: brief
+  goal: book
+  true_zone: America/New_York
+  timezone_statement: "I'm in New York."
+  timezone_hint: null
+  clarification: "Eastern time, New York."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "11:00"
+    end: "15:00"
+  correction: "Could we do {{window.dates_text}}, between 11 am and 3 pm New York time?"
+  script:
+    - say: "Hi, I'd like to book a quick intro call in the next few days, around midday. I'm in New York."
+    - say: "Eastern time, New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

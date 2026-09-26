@@ -1,0 +1,30 @@
+id: happy-book-browser-hint
+title: Book with only a browser time zone hint
+tags: [happy]
+persona:
+  given_name: Priya
+  initial: S
+  style: brief
+  goal: book
+  true_zone: America/Denver
+  timezone_statement: null
+  timezone_hint: America/Denver
+  clarification: "Yes, Denver time is right."
+  window:
+    dates: {rule: next_business_days, count: 5}
+    start: "09:00"
+    end: "13:00"
+  correction: "Could we do a morning {{window.dates_text}}, between 9 am and 1 pm Denver time?"
+  script:
+    - say: "Hi, can I book a call with you in the next few days? Mornings are best."
+    - say: "Yes, that's right, Denver."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true

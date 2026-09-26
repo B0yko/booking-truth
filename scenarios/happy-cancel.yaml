@@ -1,0 +1,32 @@
+id: happy-cancel
+title: "Cancel: please drop the meeting"
+tags: [happy]
+setup:
+  booking:
+    date: {rule: nth_business_day, n: 3}
+    local_time: "15:00"
+    zone: host
+persona:
+  given_name: Lena
+  initial: M
+  style: brief
+  goal: cancel
+  true_zone: America/New_York
+  timezone_statement: null
+  timezone_hint: null
+  clarification: "New York."
+  window:
+    # A correct cancel leaves no booking; the window only matters if the agent books or moves one.
+    dates: {rule: next_business_days, count: 5}
+    start: "09:00"
+    end: "17:00"
+  script:
+    - say: "Please drop the meeting, we won't need it."
+    - say: "Yes, please cancel it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 0
+  status: cancelled
+  in_window: false

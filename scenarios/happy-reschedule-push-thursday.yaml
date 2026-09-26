@@ -1,0 +1,35 @@
+id: happy-reschedule-push-thursday
+title: "Reschedule: something came up, push to Thursday"
+tags: [happy]
+setup:
+  booking:
+    date: {rule: next_weekday, weekday: tue}
+    local_time: "10:00"
+    zone: host
+persona:
+  given_name: Tom
+  initial: W
+  style: brief
+  goal: reschedule
+  true_zone: America/New_York
+  timezone_statement: null
+  timezone_hint: null
+  clarification: "New York."
+  window:
+    dates: {rule: weekday_after, weekday: thu, anchor: setup}
+    start: "09:00"
+    end: "17:00"
+  correction: "I meant the Thursday right after our call, {{window.first_date_text}}. Any time that day works."
+  script:
+    - say: "Something came up, can we push our call to Thursday?"
+    - say: "New York."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, move it."
+      when: agent_asks_confirmation
+    - say: "Thanks."
+      end: true
+expect:
+  bookings: 1
+  status: rescheduled
+  in_window: true

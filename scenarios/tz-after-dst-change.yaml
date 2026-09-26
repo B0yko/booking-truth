@@ -1,0 +1,30 @@
+id: tz-after-dst-change
+title: Book on the first workday after the prospect's daylight saving change
+tags: [timezone]
+persona:
+  given_name: Nina
+  initial: F
+  style: brief
+  goal: book
+  true_zone: America/Los_Angeles
+  timezone_statement: "I'm on Pacific time."
+  timezone_hint: null
+  clarification: "Pacific time, Los Angeles."
+  window:
+    dates: {rule: first_workday_after_dst_change, zone: America/Los_Angeles}
+    start: "09:00"
+    end: "12:00"
+  correction: "It has to be {{window.first_date_text}}, between 9 am and noon Pacific time."
+  script:
+    - say: "Hi, can we do a call on {{window.first_date_text}}, in the morning my time? I'm on Pacific time."
+    - say: "Pacific time, Los Angeles."
+      when: agent_asks_timezone
+    - pick: in_window
+    - say: "Yes, please book it."
+      when: agent_asks_confirmation
+    - say: "Thanks!"
+      end: true
+expect:
+  bookings: 1
+  status: booked
+  in_window: true
