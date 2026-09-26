@@ -250,8 +250,8 @@ class AgentCore:
         if stored is not None:
             return TurnOutcome(200, stored)
         try:
-            async with self._hook_lead_lock(email):
-                body = await self._run_turn(req, email, token)
+            async with self._hook_lead_lock(email) as lock_lost:
+                body = await self._run_turn(req, email, token, lock_lost)
         except LeadBusy:
             await self._hook_dedupe_abort(req)
             return TurnOutcome(409, ErrorBody(error="lead_busy", reply=render.LEAD_BUSY).to_json())
@@ -298,7 +298,7 @@ class AgentCore:
             self.store.messages.discard(req.session_id, req.message_id)
 
     @asynccontextmanager
-    async def _hook_lead_lock(self, email: str) -> AsyncIterator[None]:
+    async def _hook_lead_lock(self, email: str) -> AsyncIterator[asyncio.Event | None]:
         """Hook for ``lead_lock``: hold the lead's lease for the turn (renewed while it runs); raise
         :class:`LeadBusy` when it cannot be taken within the wait.
 
@@ -308,32 +308,43 @@ class AgentCore:
         :data:`~booking_truth.store.repos.LEAD_LOCK_WAIT_S` gets ``409 lead_busy`` instead of running
         concurrently with the one that holds it. A background task renews the lease every
         :data:`LEAD_LOCK_RENEW_S` for as long as the turn runs, comfortably inside the lease itself, and is
-        cancelled and awaited before the lease is released, win or fail."""
+        cancelled and awaited before the lease is released, win or fail.
+
+        Yields the turn's lease-lost signal (``None`` with the guard off): an :class:`asyncio.Event` that
+        the renewal task sets the moment it finds the lease is no longer this turn's to renew — another
+        owner took it over because a renewal cycle was missed for long enough that the lease genuinely
+        expired, not only "short of a bug". The caller threads it onto :class:`TurnContext` so the write
+        path can refuse to touch the calendar once it is set (:meth:`ToolExecutor._dispatch_guarded`)
+        instead of silently racing the new owner."""
         if not self.on("lead_lock"):
-            yield
+            yield None
             return
         locks = self.store.locks
         key = locks.lead_key(email)
         owner = uuid.uuid4().hex
         if not await locks.await_acquire(key, owner):
             raise LeadBusy
-        renewal = asyncio.create_task(self._renew_lead_lock(key, owner))
+        lost = asyncio.Event()
+        renewal = asyncio.create_task(self._renew_lead_lock(key, owner, lost))
         try:
-            yield
+            yield lost
         finally:
             renewal.cancel()
             with suppress(asyncio.CancelledError):
                 await renewal
             locks.release(key, owner)
 
-    async def _renew_lead_lock(self, key: str, owner: str) -> None:
+    async def _renew_lead_lock(self, key: str, owner: str, lost: asyncio.Event) -> None:
         """Keeps ``lead_lock``'s lease alive while the turn runs; cancelled from
-        :meth:`_hook_lead_lock`'s ``finally`` once it is done. Stops on its own if the lease was ever lost
-        (it cannot have been, short of a bug, since only its owner extends it, but a lost lease is not
-        worth renewing forever)."""
+        :meth:`_hook_lead_lock`'s ``finally`` once it is done. A renewal cycle can find the lease already
+        taken over by another owner — a very slow turn (a stalled calendar, a slow model call) can miss
+        enough cycles for the lease to expire for real before its own renewal runs again. That is not
+        "short of a bug": it sets ``lost`` and stops renewing, so the turn still running under the old
+        lease learns it no longer has exclusive use of it."""
         while True:
             await asyncio.sleep(LEAD_LOCK_RENEW_S)
             if not self.store.locks.renew(key, owner):
+                lost.set()
                 return
 
     def _hook_tz_prescan(self, text: str, ctx: TurnContext) -> str | None:
@@ -672,7 +683,9 @@ class AgentCore:
             return hinted, "browser_hint"
         return self.settings.host_timezone, "host_default"
 
-    async def _run_turn(self, req: ChatRequest, email: str, token: str | None) -> dict[str, Any]:
+    async def _run_turn(
+        self, req: ChatRequest, email: str, token: str | None, lock_lost: asyncio.Event | None
+    ) -> dict[str, Any]:
         store = self.store
         store.sessions.get_or_create(
             req.session_id,
@@ -693,6 +706,7 @@ class AgentCore:
             zone_source=source,
             now=self.deps.clock.now(),
         )
+        ctx.state.lock_lost = lock_lost
         executor = ToolExecutor(self.deps, ctx)
         usage = Usage()
         history = self._history(req.session_id)
@@ -928,13 +942,14 @@ class AgentCore:
             return self._coded(user_text, reply, calls=calls, claims=[claim])
         if isinstance(result, dict) and result.get("reason") == "already_booked":
             existing = result.get("existing") or {}
-            if slot is not None:
-                reply = (
-                    f"You already have a call booked for {existing.get('label')} ({ctx.zone}). "
-                    f"Would you like me to move it to {slot['label']} instead?"
-                )
+            base = f"You already have a call booked for {existing.get('label')} ({ctx.zone})."
+            # The offer to move it is only made when a reschedule quick reply actually works
+            # (``ctx.state.reschedule_offer``): on the widget channel a booking made outside this session
+            # cannot be rescheduled from here (``ToolExecutor._allowed``), so the reply must not promise it.
+            if slot is not None and ctx.state.reschedule_offer is not None:
+                reply = f"{base} Would you like me to move it to {slot['label']} instead?"
             else:
-                reply = f"You already have a call booked for {existing.get('label')} ({ctx.zone})."
+                reply = base
             return self._coded(user_text, reply, calls=calls)
         if isinstance(result, dict) and result.get("booked") == "unconfirmed":
             return self._coded(user_text, render.UNCONFIRMED, calls=calls)

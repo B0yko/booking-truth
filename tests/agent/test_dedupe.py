@@ -118,11 +118,11 @@ async def test_a_failed_turn_drops_its_pending_row_so_a_retry_runs_fresh(
     original = agent._run_turn
     attempts = {"n": 0}
 
-    async def flaky(req: Any, email: str, token: str | None) -> dict[str, Any]:
+    async def flaky(req: Any, email: str, token: str | None, lock_lost: Any) -> dict[str, Any]:
         attempts["n"] += 1
         if attempts["n"] == 1:
             raise RuntimeError("a transient failure, not a real one")
-        result: dict[str, Any] = await original(req, email, token)
+        result: dict[str, Any] = await original(req, email, token, lock_lost)
         return result
 
     monkeypatch.setattr(agent, "_run_turn", flaky)

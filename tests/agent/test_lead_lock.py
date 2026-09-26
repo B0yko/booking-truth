@@ -100,6 +100,40 @@ async def test_the_lease_is_renewed_while_the_turn_still_runs(
         assert env.deps.store.locks.holder(key) is None
 
 
+async def test_a_lost_lease_refuses_to_dispatch_a_write(guarded: AgentEnv) -> None:
+    """``ToolExecutor._dispatch_guarded`` is the one choke point every calendar write goes through
+    (a fresh dispatch and a retry of one): once the turn's lease-lost signal is set, nothing reaches the
+    calendar for it, however the tool got there."""
+    tools = executor(guarded)
+    slot = (await guarded_slots(tools))[0]
+    tools.ctx.state.lock_lost = asyncio.Event()
+    tools.ctx.state.lock_lost.set()
+    result = await tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert result["booked"] is False
+    assert result["reason"] == "calendar_error"
+    assert len(guarded.log("bookings.create")) == 0
+    assert ("lead_lock", "lease_lost") in events(tools)
+
+
+async def test_a_turn_that_loses_its_lease_mid_turn_does_not_book(
+    sandbox: Sandbox, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The renewal task finding another owner already holds the lease (a renewal cycle missed for long
+    enough that the lease genuinely expired) must stop the turn's own writes, not just stop renewing:
+    simulate the loss and slow the read the write path makes first, so a renewal cycle has a chance to
+    fire before the turn would otherwise dispatch — proof that the signal reaches the write path through
+    the real ``_hook_lead_lock`` / ``_run_turn`` wiring, not only when set by hand."""
+    monkeypatch.setattr(core_module, "LEAD_LOCK_RENEW_S", 0.03)
+    async for env in make_env(sandbox, tmp_path, guards="all"):
+        monkeypatch.setattr(env.deps.store.locks, "renew", lambda *a, **k: False)
+        env.faults({"group": "bookings.list", "mode": "slow", "latency_ms": 150})
+        offer = await env.say(ASK)
+        pick = next(q for q in offer["quick_replies"] if q.get("start_utc"))
+        response = await env.act(pick["action"])
+        assert response["booking"] is None
+        assert len(env.log("bookings.create")) == 0
+
+
 async def test_lead_busy_returns_409_with_a_short_reply_and_no_turn_runs(
     guarded: AgentEnv, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -219,3 +253,24 @@ async def test_the_reschedule_offer_reply_names_the_existing_booking_through_the
     second = await guarded.act({"type": "select_slot", "slot_id": first_pick["action"]["slot_id"]})
     assert "You already have a call booked for" in second["reply"]
     assert len(guarded.bookings()) == 1
+
+
+async def test_a_widget_session_is_not_offered_a_reschedule_it_cannot_make(guarded: AgentEnv) -> None:
+    """The policy reads the calendar across every channel and session, so a booking made outside this
+    widget session still turns a second booking into ``already_booked`` here too; but reschedule and
+    cancel are scoped to the widget session (``ToolExecutor._allowed``), so offering to move *that*
+    booking would dangle a quick reply the agent can only then refuse. Neither the tool result nor the
+    reply may promise a reschedule this session cannot complete."""
+    uid = guarded.setup_booking(MON_1000)
+    tools = executor(guarded, channel="widget", session="w-1")
+    other_slot = (await guarded_slots(tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+    result = await tools.run("book_slot", {"slot_id": other_slot["slot_id"]})
+    assert result["booked"] is False
+    assert result["reason"] == "already_booked"
+    assert result["existing"]["booking_uid"] == uid
+    assert tools.ctx.state.reschedule_offer is None
+    reply = await guarded.act(
+        {"type": "select_slot", "slot_id": other_slot["slot_id"]}, channel="widget", session="w-2"
+    )
+    assert "Would you like me to move it" not in reply["reply"]
+    assert reply["quick_replies"] == []

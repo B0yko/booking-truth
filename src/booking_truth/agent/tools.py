@@ -90,6 +90,13 @@ ALREADY_BOOKED_INSTRUCTION = (
     "The prospect already has a booking. Offer to move it with reschedule_booking instead of booking a "
     "second call."
 )
+#: The existing booking is not one this conversation is allowed to change (widget session scoping), so
+#: reschedule_booking would only fail; tell the prospect instead of offering an action that cannot work.
+ALREADY_BOOKED_ELSEWHERE_INSTRUCTION = (
+    "The prospect already has a booking, but it was made outside this conversation, so it cannot be "
+    "changed from here. Tell them so, and that they can reply where they made it (or contact us) to move "
+    "or cancel it. Do not offer reschedule_booking for it."
+)
 UNCONFIRMED_INSTRUCTION = (
     "Tell the prospect you couldn't confirm the booking just now and that a colleague will confirm it by "
     "email. Do not say it is booked."
@@ -286,6 +293,10 @@ class TurnState:
     last_book_start: datetime | None = None
     calendar_unavailable: bool = False
     zone_changed: bool = False
+    #: ``lead_lock``'s lease-lost signal for this turn (``None`` off, or once the turn's lease was taken
+    #: over by another owner). Set by :class:`~booking_truth.agent.core.AgentCore` before any tool runs;
+    #: checked by :meth:`ToolExecutor._dispatch_guarded` before every calendar write.
+    lock_lost: asyncio.Event | None = None
 
     def event(self, guard: str, name: str, detail: str = "") -> None:
         self.events.append(GuardEvent(guard=guard, event=name, detail=detail[:300]))
@@ -772,6 +783,21 @@ class ToolExecutor:
                 return key, landed
         return key, None
 
+    async def _dispatch_guarded(self, dispatch: Dispatch) -> WriteResult:
+        """Hook for ``lead_lock``: the one choke point every calendar write (a fresh dispatch, and a retry
+        of one) goes through. Once the turn's lease has been taken over by another owner
+        (``ctx.state.lock_lost`` set — see :meth:`~booking_truth.agent.core.AgentCore._renew_lead_lock``),
+        this turn is no longer serialised against whatever that new owner is doing for the same lead, so
+        sending the write now could double-book with nothing left to catch it; the write is refused instead
+        of dispatched. With the guard off, or the lease still held, dispatches exactly as asked."""
+        lost = self.ctx.state.lock_lost
+        if lost is not None and lost.is_set():
+            self.state.event(
+                "lead_lock", "lease_lost", "the lease was taken over mid-turn; the write was not sent"
+            )
+            return WriteUnknown("lease_lost", "the lead's lease was lost while this turn was still running")
+        return await dispatch()
+
     async def _hook_after_unknown(
         self,
         kind: Literal["create", "reschedule", "cancel"],
@@ -802,7 +828,7 @@ class ToolExecutor:
             if attempt == 1 or dispatch is None:
                 break
             self.state.event("idempotency", "retry", f"{kind}: {reason}")
-            current = await dispatch()
+            current = await self._dispatch_guarded(dispatch)
             if not isinstance(current, WriteUnknown):
                 if not isinstance(current, WriteOk):
                     self.deps.store.idem.fail(key)
@@ -879,7 +905,7 @@ class ToolExecutor:
                 idem_key=key,
             )
 
-        result: WriteResult = adopted if adopted is not None else await dispatch()
+        result: WriteResult = adopted if adopted is not None else await self._dispatch_guarded(dispatch)
         if isinstance(result, WriteUnknown):
             result = await self._hook_after_unknown(
                 "create", result, key=key, start=start, ref=None, dispatch=dispatch
@@ -908,12 +934,15 @@ class ToolExecutor:
         start = parse_iso(str(slot["start_utc"]))
         outcome, record, existing, _ = await self.create(start)
         if outcome == "already_booked" and existing is not None:
-            self.state.reschedule_offer = {"booking_uid": existing.ref, "slot_id": slot_id}
+            changeable = self._allowed(existing.ref)
+            if changeable:
+                self.state.reschedule_offer = {"booking_uid": existing.ref, "slot_id": slot_id}
+            instruction = ALREADY_BOOKED_INSTRUCTION if changeable else ALREADY_BOOKED_ELSEWHERE_INSTRUCTION
             return {
                 "booked": False,
                 "reason": "already_booked",
                 "existing": self._existing_view(existing),
-                "instruction": ALREADY_BOOKED_INSTRUCTION,
+                "instruction": instruction,
             }
         if outcome == "booked" and record is not None:
             return {
@@ -962,7 +991,7 @@ class ToolExecutor:
                 ref=ref, new_start=start, idem_key=key, reason="Rescheduled by the prospect"
             )
 
-        result: WriteResult = adopted if adopted is not None else await dispatch()
+        result: WriteResult = adopted if adopted is not None else await self._dispatch_guarded(dispatch)
         if isinstance(result, WriteUnknown):
             result = await self._hook_after_unknown(
                 "reschedule", result, key=key, start=start, ref=ref, dispatch=dispatch
@@ -1041,7 +1070,7 @@ class ToolExecutor:
         async def dispatch() -> WriteResult:
             return await self.deps.calendar.cancel(ref=ref, reason=cancel_reason, idem_key=key)
 
-        result: WriteResult = adopted if adopted is not None else await dispatch()
+        result: WriteResult = adopted if adopted is not None else await self._dispatch_guarded(dispatch)
         if isinstance(result, WriteUnknown):
             result = await self._hook_after_unknown(
                 "cancel", result, key=key, start=None, ref=ref, dispatch=dispatch
