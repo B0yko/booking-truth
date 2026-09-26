@@ -1,0 +1,40 @@
+booking-truth datasets: third-party data notices
+================================================
+
+datasets/cities_tz.csv
+----------------------
+Contains data from GeoNames (https://www.geonames.org/), licensed under the Creative Commons
+Attribution 4.0 International licence (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/).
+GeoNames provides the data "as is", without warranty or any representation of accuracy, timeliness
+or completeness.
+
+Source files, downloaded on 2026-09-26:
+  https://download.geonames.org/export/dump/cities15000.zip
+    sha256 9c1f26fa632212ad77e5b82b6d5df3b019a3c119e423efe59d7224a186f9c9f4
+  https://download.geonames.org/export/dump/admin1CodesASCII.txt
+    sha256 1da92a6323a5fec3176f3f743bf4cf4040fd56a876da55e46fbca23c863aa60a
+
+Changes made to the GeoNames data:
+  - Of the 19 columns of the GeoNames "geoname" table, only name, asciiname, country code,
+    admin1 code, population and timezone are kept (renamed to name, asciiname, country_code,
+    admin1_code, population, timezone).
+  - A column admin1_name is added: the ASCII name of the first-level administrative division,
+    joined from admin1CodesASCII.txt on "<country code>.<admin1 code>" (empty when GeoNames has no
+    entry for that code).
+  - Rows whose timezone is not a zone key of the tzdata package are dropped (no row was dropped
+    on the download date: 34,149 rows kept).
+  - Rows are sorted by ASCII name (case-insensitive), country code, admin1 code, descending
+    population and name.
+The file is produced by scripts/build_cities_tz.py.
+
+datasets/tz_phrases.jsonl
+-------------------------
+The items with source "city_sample" contain city, region and country names taken from
+cities_tz.csv, that is from GeoNames data (CC BY 4.0, see above).
+
+Timezone data
+-------------
+Zone keys and the files zone.tab and iso3166.tab come from the IANA tz database
+(https://www.iana.org/time-zones), which is in the public domain. They are read from the tzdata
+Python package (version 2026.4, IANA release 2026d) when the datasets are built and checked; they
+are not copied into this directory.
