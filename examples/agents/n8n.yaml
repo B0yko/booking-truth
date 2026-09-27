@@ -1,0 +1,25 @@
+# agent.yaml for examples/n8n/booking-agent-proxy.json: the imported and published n8n workflow
+# "Webhook -> HTTP Request (the booking agent's POST /v1/chat) -> Respond to Webhook".
+#
+#   booking-truth test --agent http://127.0.0.1:5678/webhook/booking-agent \
+#     --agent-config examples/agents/n8n.yaml --sandbox http://localhost:8100 --only smoke --k 1
+#
+# The workflow forwards this request body as is (with channel overridden to "webhook") to the guarded
+# agent's POST /v1/chat and returns the agent's JSON with the agent's status, so this file only needs to
+# match that protocol; see examples/agents/bundled.yaml and docs/n8n.md.
+url: http://127.0.0.1:5678/webhook/booking-agent
+body:
+  session_id: "{{session_id}}"
+  message_id: "{{message_id}}"
+  channel: "{{channel}}"
+  lead:
+    email: "{{lead.email}}"
+    name: "{{lead.name}}"
+    timezone_hint: "{{lead.timezone_hint}}"
+  message: "{{message}}"
+response:
+  reply_path: reply
+  version_path: agent_version
+timeout_s: 60
+# session_id: the agent behind the workflow keeps its own state per session_id (sent in the body above).
+session_mode: session_id
