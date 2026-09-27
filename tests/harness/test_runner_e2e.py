@@ -153,7 +153,9 @@ def test_outputs_are_the_four_files_and_the_report_says_offline_grading(main_run
     assert manifest["hardware"] == "test machine, 1 GB"
     assert manifest["suite"] == "bundled"
     assert manifest["llm_calls"]["agent:stub"]["models_returned"] == ["stub-model"]
+    assert manifest["llm_calls"]["agent:stub"]["providers"] == ["stub-provider"]
     assert manifest["llm_calls"]["agent:stub"]["varied"] is False
+    assert manifest["llm_calls"]["agent:stub"]["calls"] > 0
 
 
 def test_every_trace_validates_against_the_schema(main_run: MainRun) -> None:

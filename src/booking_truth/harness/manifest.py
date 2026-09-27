@@ -117,17 +117,33 @@ class CallRecorder:
         self.pairs[component][(model or "", provider or "")] += 1
 
     def record_usage(self, component: str, usage: Mapping[str, Any] | None) -> None:
-        """Read ``model`` and ``provider`` from an agent response's ``usage`` object, when it carries them."""
+        """Read every model id and upstream provider an agent turn's ``usage`` object reports.
+
+        The bundled protocol's ``usage.models``/``usage.providers`` (plural: see
+        ``booking_truth.agent.loop.Usage.to_json``) are the distinct ids and providers every internal
+        model call of that turn returned, already deduplicated by the agent - never a singular
+        ``usage.model``/``usage.provider``. A turn is counted once; its models and providers each join
+        the distinct sets (so ``varied`` is exact), and the ``per_call`` breakdown pairs them
+        positionally, which is exact for the common case of one model and one provider throughout the
+        turn and best-effort otherwise, since the wire format does not preserve the true per-call
+        pairing.
+        """
         if not isinstance(usage, Mapping):
             return
-        model = usage.get("model")
-        provider = usage.get("provider")
-        if isinstance(model, str) or isinstance(provider, str):
-            self.record(
-                component,
-                model=model if isinstance(model, str) else None,
-                provider=provider if isinstance(provider, str) else None,
-            )
+        models = [m for m in usage.get("models") or () if isinstance(m, str) and m]
+        providers = [p for p in usage.get("providers") or () if isinstance(p, str) and p]
+        if not models and not providers:
+            return
+        self.calls[component] += 1
+        for model in models:
+            self.models[component].add(model)
+        for provider in providers:
+            self.providers[component].add(provider)
+        left, right = models or [""], providers or [""]
+        for index in range(max(len(left), len(right))):
+            model = left[index] if index < len(left) else ""
+            provider = right[index] if index < len(right) else ""
+            self.pairs[component][(model, provider)] += 1
 
     def to_json(self) -> dict[str, Any]:
         components = sorted(set(self.calls) | set(self.models) | set(self.providers))

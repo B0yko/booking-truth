@@ -85,8 +85,11 @@ def test_call_recorder_flags_variation() -> None:
     calls = CallRecorder()
     calls.record("persona", model="vendor/a-2026", provider="p1")
     calls.record("persona", model="vendor/a-2026", provider="p2")
-    calls.record_usage("agent:guarded", {"model": "vendor/a-2026", "provider": "p1", "usd": 0.1})
-    calls.record_usage("agent:guarded", {"usd": 0.1})
+    # An agent turn's usage carries the *lists* every internal model call of that turn returned
+    # (booking_truth.agent.loop.Usage.to_json: "models"/"providers", plural, already deduplicated),
+    # never a singular "model"/"provider" - that shape is asserted in tests/agent/test_api.py.
+    calls.record_usage("agent:guarded", {"models": ["vendor/a-2026"], "providers": ["p1"], "usd": 0.1})
+    calls.record_usage("agent:guarded", {"models": [], "providers": [], "usd": 0.1})
     calls.record_usage("agent:naive", None)
     assert calls.to_json() == {
         "agent:guarded": {
@@ -107,6 +110,29 @@ def test_call_recorder_flags_variation() -> None:
             ],
         },
     }
+
+
+def test_call_recorder_reads_plural_agent_usage_not_a_singular_field() -> None:
+    """A turn's usage never carries a bare ``model``/``provider`` key; that shape must be ignored,
+    not silently misread as if it were ``models``/``providers``."""
+    calls = CallRecorder()
+    calls.record_usage("agent:guarded", {"model": "vendor/a-2026", "provider": "p1", "usd": 0.1})
+    assert calls.to_json() == {}
+
+
+def test_call_recorder_pairs_mixed_length_agent_usage_positionally() -> None:
+    """A turn whose internal calls returned more than one distinct model or provider: every one joins
+    the distinct sets and is flagged as varied, even though the exact per-call pairing cannot be
+    recovered from the already-deduplicated ``models``/``providers`` lists."""
+    calls = CallRecorder()
+    calls.record_usage(
+        "agent:guarded", {"models": ["vendor/a-2026", "vendor/b-2026"], "providers": ["p1"], "usd": 0.2}
+    )
+    out = calls.to_json()["agent:guarded"]
+    assert out["calls"] == 1
+    assert out["models_returned"] == ["vendor/a-2026", "vendor/b-2026"]
+    assert out["providers"] == ["p1"]
+    assert out["varied"] is True
 
 
 def test_the_manifest_is_redacted() -> None:

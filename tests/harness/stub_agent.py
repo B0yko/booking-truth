@@ -467,7 +467,8 @@ class StubAgent:
                         "prompt_tokens": 10,
                         "completion_tokens": 5,
                         "usd": options.usage_usd,
-                        "model": "stub-model",
+                        "models": ["stub-model"],
+                        "providers": ["stub-provider"],
                     },
                 }
             )
