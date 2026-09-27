@@ -318,6 +318,19 @@ def render_report(summary: Mapping[str, Any], manifest: Mapping[str, Any]) -> st
                 row += [fmt_share(entry.get("no_violation")), fmt_share(entry.get("pass"))]
             fault_rows.append(row)
         lines += table(header, fault_rows)
+        not_injected = sorted(
+            s
+            for s in fault_ids
+            if any((by_agent[a]["per_fault"].get(s) or {}).get("harness_fault_not_injected") for a in agents)
+        )
+        if not_injected:
+            lines += [
+                "",
+                "Harness-side fault (`duplicate_delivery`/`concurrent_channel`) never fired in at least "
+                "one valid trial of: "
+                + ", ".join(f"`{s}`" for s in not_injected)
+                + " (see that trial's `meta.harness_fault` in `traces.jsonl`).",
+            ]
 
     tz_ids = sorted(
         {s for a in agents for s in by_agent[a]["timezone_correct_slot"]},

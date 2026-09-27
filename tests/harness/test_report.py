@@ -64,6 +64,29 @@ def test_summary_and_report_are_derived_from_traces_and_manifest(run_dir: Path) 
     assert "rerun `fault-slots-500-once` #0: attempts 1: harness_error, 2: pass" in report
 
 
+def test_the_fault_table_footnotes_a_harness_fault_that_never_fired(tmp_path: Path) -> None:
+    out = tmp_path / "fake-run"
+    slots = [
+        Slot(
+            "guarded",
+            "guarded",
+            "fault-concurrent-channel",
+            ("fault",),
+            0,
+            "pass",
+            harness_fault_injected=False,
+        ),
+        *standard_slots(),
+    ]
+    write_fake_run(out, slots)
+    report = (out / REPORT_FILE).read_text()
+    footnote = next(line for line in report.splitlines() if line.startswith("Harness-side fault"))
+    assert footnote == (
+        "Harness-side fault (`duplicate_delivery`/`concurrent_channel`) never fired in at least one valid "
+        "trial of: `fault-concurrent-channel` (see that trial's `meta.harness_fault` in `traces.jsonl`)."
+    )
+
+
 def test_regeneration_is_byte_identical(run_dir: Path) -> None:
     before = {n: (run_dir / n).read_bytes() for n in (SUMMARY_FILE, REPORT_FILE)}
     for name in before:

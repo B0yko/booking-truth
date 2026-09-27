@@ -202,7 +202,9 @@ def test_summary_per_agent_numbers() -> None:
     assert guarded["integrity"]["false_success"] == rate(1, 3)
     assert guarded["integrity"]["time_mismatch"] == rate(0, 3)
     assert guarded["integrity"]["any"] == rate(1, 3)
-    assert guarded["per_fault"] == {"fault-a": {"no_violation": rate(1, 2), "pass": rate(1, 2)}}
+    assert guarded["per_fault"] == {
+        "fault-a": {"no_violation": rate(1, 2), "pass": rate(1, 2), "harness_fault_not_injected": 0}
+    }
     assert guarded["timezone_correct_slot"] == {"tz-a": rate(1, 1)}
     # Five attempts in all, one of them a persona error.
     assert guarded["persona_error_rate"] == rate(1, 5)
@@ -237,6 +239,25 @@ def test_summary_per_agent_numbers() -> None:
     }
     assert naive["pass_hat_1"]["value"] == 0.25  # (0/2 + 1/2) / 2
     assert naive["timezone_correct_slot"] == {"tz-a": rate(0, 2)}
+
+
+def test_per_fault_counts_trials_where_a_harness_fault_never_fired() -> None:
+    """``concurrent_channel``/``duplicate_delivery`` are injected by the harness, not the sandbox: a
+    scenario that configures one but never gets a suitable pick to inject it into is not a crash (the
+    fault-runner fix), but it is a fact worth surfacing next to that scenario's other numbers."""
+    trials = [
+        trial("guarded", "fault-a", 0, "pass", harness_fault_injected=True),
+        trial("guarded", "fault-a", 1, "pass", harness_fault_injected=False),
+        trial("guarded", "fault-a", 2, "pass", harness_fault_injected=None),
+    ]
+    summary = summarize(trials, k=1, agents=["guarded"], scenarios=["fault-a"])
+    assert summary["by_agent"]["guarded"]["per_fault"]["fault-a"] == {
+        "no_violation": rate(3, 3),
+        "pass": rate(3, 3),
+        "harness_fault_not_injected": 1,
+    }
+    rebuilt = TrialResult.from_json(json.loads(json.dumps(trials[1].to_json())))
+    assert rebuilt.harness_fault_injected is False
 
 
 def test_summary_run_level_numbers() -> None:

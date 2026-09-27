@@ -132,8 +132,16 @@ def test_the_summary_accounts_for_every_slot(main_run: MainRun) -> None:
     assert stub["integrity"]["double_booking"]["x"] == 1
     assert stub["integrity"]["unclaimed_booking"]["x"] == 1
     assert set(stub["per_fault"]) == {s for s in EXPECTED if s.startswith("fault-")}
-    assert stub["per_fault"]["fault-concurrent-channel"] == {"no_violation": rate(0, 1), "pass": rate(0, 1)}
-    assert stub["per_fault"]["fault-slots-500-once"] == {"no_violation": rate(1, 1), "pass": rate(1, 1)}
+    assert stub["per_fault"]["fault-concurrent-channel"] == {
+        "no_violation": rate(0, 1),
+        "pass": rate(0, 1),
+        "harness_fault_not_injected": 0,
+    }
+    assert stub["per_fault"]["fault-slots-500-once"] == {
+        "no_violation": rate(1, 1),
+        "pass": rate(1, 1),
+        "harness_fault_not_injected": 0,
+    }
     assert summary["run"]["grading"] == "offline grading"
 
 

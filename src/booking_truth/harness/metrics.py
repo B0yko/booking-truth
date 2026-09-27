@@ -134,6 +134,11 @@ class TrialResult:
     turn_cap_hit: bool = False
     turns: int = 0
     guard_turns: int = 0
+    #: ``None`` when the scenario configures no harness-side fault (``duplicate_delivery`` or
+    #: ``concurrent_channel``); else whether it actually fired in this trial. ``concurrent_channel``
+    #: defers to a later pick when the first one does not yet carry enough offered slots, and is simply
+    #: never injected if no pick in the whole conversation does (``harness/hfaults.py``).
+    harness_fault_injected: bool | None = None
 
     def __post_init__(self) -> None:
         if self.outcome not in OUTCOMES:
@@ -172,6 +177,7 @@ class TrialResult:
             "turn_cap_hit": self.turn_cap_hit,
             "turns": self.turns,
             "guard_turns": self.guard_turns,
+            "harness_fault_injected": self.harness_fault_injected,
         }
 
     @classmethod
@@ -198,6 +204,7 @@ class TrialResult:
             turn_cap_hit=bool(data.get("turn_cap_hit", False)),
             turns=int(data.get("turns", 0)),
             guard_turns=int(data.get("guard_turns", 0)),
+            harness_fault_injected=data.get("harness_fault_injected"),
         )
 
 
@@ -284,6 +291,9 @@ def _agent_summary(agent: str, trials: list[TrialResult], scenarios: Sequence[st
                     sum(t.outcome not in INTEGRITY_OUTCOMES for t in group_valid), len(group_valid)
                 ),
                 "pass": rate(_count(group_valid, {"pass"}), len(group_valid)),
+                # Only ever nonzero for a scenario with a harness_fault (duplicate_delivery,
+                # concurrent_channel): a trial where the scenario configured one but it never fired.
+                "harness_fault_not_injected": sum(t.harness_fault_injected is False for t in group_valid),
             }
         if "timezone" in tags:
             timezone[scenario] = rate(sum(t.correct_slot for t in group_valid), len(group_valid))

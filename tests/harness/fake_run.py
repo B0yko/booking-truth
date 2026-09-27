@@ -32,6 +32,7 @@ class Slot:
     llm_belief: BeliefStatus | None = None
     agent_usd: float = 0.001
     attempts: tuple[str, ...] = ()
+    harness_fault_injected: bool | None = None
 
 
 def lead_email(slot: Slot) -> str:
@@ -121,6 +122,7 @@ def write_fake_run(
             agent_usd=slot.agent_usd,
             turns=2,
             guard_turns=1 if slot.mode == "guarded" else 0,
+            harness_fault_injected=slot.harness_fault_injected,
         )
         for number, outcome in enumerate(outcomes, start=1):
             final = number == len(outcomes)

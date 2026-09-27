@@ -73,7 +73,7 @@ from booking_truth.harness.personas import (
 from booking_truth.harness.redact import short_path, shorten_paths
 from booking_truth.harness.report import write_run
 from booking_truth.harness.sandbox_client import DEFAULT_TOKEN, SandboxClient, SandboxError, Settled
-from booking_truth.harness.scenarios import ResolvedScenario, Scenario, ScenarioError
+from booking_truth.harness.scenarios import HarnessFault, ResolvedScenario, Scenario, ScenarioError
 from booking_truth.harness.tracebuild import TraceInput, TranscriptEntry, build_trace, finalize, trace_id
 from booking_truth.llm.ledger import CostLedger, LedgerError
 from booking_truth.resources import data_path
@@ -334,6 +334,8 @@ class Attempt:
     turn_cap_hit: bool = False
     turns: int = 0
     guard_turns: int = 0
+    #: ``None`` when the scenario configures no harness fault; else whether it fired this attempt.
+    harness_fault_injected: bool | None = None
 
 
 def _harness_bug(exc: BaseException) -> str:
@@ -344,6 +346,32 @@ def _harness_bug(exc: BaseException) -> str:
         frame.filename = short_path(frame.filename)
     text = "".join(report.format(chain=False))
     return shorten_paths(f"harness bug: {type(exc).__name__}: {exc}\n{text}")
+
+
+def _fault_ready(fault: HarnessFault, step: PersonaTurn) -> bool:
+    """Whether this pick knows enough offered slots to inject ``fault``.
+
+    ``duplicate_delivery`` resends the same message regardless of how many slots were offered.
+    ``concurrent_channel`` asks the second channel for ``offered[fault.pick]``, so it needs a *different*
+    slot from the one this pick accepts: with fewer than ``fault.pick + 1`` offers known, injecting it now
+    would silently ask for the same (or, before this fix, crash outright); the caller defers to a later
+    pick instead."""
+    if fault.type != "concurrent_channel":
+        return True
+    return len(step.choices) > fault.pick
+
+
+def _harness_fault_meta(
+    configured: HarnessFault | None, fired: FaultReport | None
+) -> tuple[dict[str, Any] | None, bool | None]:
+    """The trace's ``meta.harness_fault``, and (for ``TrialResult.harness_fault_injected``) whether a
+    harness fault the scenario configured actually fired this trial. ``None`` for both when the scenario
+    configures no harness fault at all."""
+    if fired is not None:
+        return fired.to_json(), True
+    if configured is not None:
+        return {"type": configured.type, "injected": False}, False
+    return None, None
 
 
 def _agent_mode(agent: AgentUnderTest, version_info: dict[str, Any] | None) -> str | None:
@@ -594,6 +622,7 @@ class _Run:
             turn_cap_hit=final.turn_cap_hit,
             turns=final.turns,
             guard_turns=final.guard_turns,
+            harness_fault_injected=final.harness_fault_injected,
         )
         traces = [
             finalize(a.trace, final=a is final, result=result.to_json() if a is final else None)
@@ -763,6 +792,9 @@ class _Run:
         persona_usd = round(persona.usage_usd, 6) if persona is not None else 0.0
         for reply in conversation.replies:
             self.calls.record_usage(f"agent:{agent.label}", reply.usage)
+        harness_fault_meta, harness_fault_injected = _harness_fault_meta(
+            resolved.scenario.harness_fault if resolved is not None else None, conversation.fault
+        )
         meta: dict[str, Any] = {
             "scenario_tags": list(scenario.tags),
             "agent_version": self.baseline.get(agent.label),
@@ -778,7 +810,7 @@ class _Run:
             "persona_turns": conversation.persona_turns,
             "agent_turns": len(conversation.replies),
             "guard_turns": sum(r.guard_active for r in conversation.replies),
-            "harness_fault": conversation.fault.to_json() if conversation.fault is not None else None,
+            "harness_fault": harness_fault_meta,
             "persona_error": persona_error,
             "agent_error": conversation.agent_error,
             "harness_error": harness_error,
@@ -839,6 +871,7 @@ class _Run:
             turn_cap_hit=conversation.turn_cap_hit,
             turns=len(conversation.replies),
             guard_turns=sum(r.guard_active for r in conversation.replies),
+            harness_fault_injected=harness_fault_injected,
         )
 
     async def _agent_tool_steps(
@@ -920,7 +953,11 @@ class _Run:
         fault = resolved.scenario.harness_fault
         last: AgentReply | None = None
         counter = 0
-        first_pick = True
+        #: Whether a configured fault is still waiting for its chance to fire. Stays ``True`` across a
+        #: pick that does not (yet) carry enough offered slots to inject it (``_fault_ready``); a fault
+        #: that never gets a suitable pick in the whole conversation is simply never injected (recorded
+        #: in the trace's ``meta.harness_fault`` as ``injected: false`` rather than crashing).
+        fault_pending = fault is not None
         while True:
             view = AgentView(last, conversation.agent_texts(conversation.session_a), self.clock.now())
             if persona.turns >= MAX_PERSONA_TURNS:
@@ -944,15 +981,14 @@ class _Run:
                 history=conversation.history(conversation.session_a),
             )
             self._user(conversation, turn, "A", step.kind, step.text)
-            if step.is_pick and first_pick and fault is not None:
+            if step.is_pick and fault_pending and fault is not None and _fault_ready(fault, step):
                 deliveries, last_reply = await self._with_fault(
                     fault.type, fault.pick, client, turn, step, lead, conversation, rng
                 )
+                fault_pending = False
             else:
                 reply = await client.send(turn)
                 deliveries, last_reply = [Delivery("A", turn, reply)], reply
-            if step.is_pick:
-                first_pick = False
             for delivery in by_arrival(deliveries):
                 self._agent(agent, conversation, delivery)
             failed = next((d.reply for d in deliveries if d.reply.error is not None), None)

@@ -375,6 +375,7 @@ async def test_duplicate_delivery_resends_the_same_message_id_after_the_delay() 
     assert last is deliveries[1].reply
     assert report.to_json()["message_id"] == "s-m3"
     assert report.to_json()["continued_from"] == "duplicate"
+    assert report.to_json()["injected"] is True
 
 
 async def test_concurrent_channel_sends_both_sessions_at_once() -> None:
@@ -394,3 +395,4 @@ async def test_concurrent_channel_sends_both_sessions_at_once() -> None:
     assert [d.session for d in deliveries] == ["A", "B"]
     assert report.to_json()["arrival_order"] == ["A", "B"]
     assert report.to_json()["channel_b"] == "webhook"
+    assert report.to_json()["injected"] is True

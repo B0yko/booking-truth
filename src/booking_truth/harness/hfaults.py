@@ -46,7 +46,7 @@ class FaultReport:
     details: dict[str, Any] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
-        return {"type": self.type, **self.details}
+        return {"type": self.type, "injected": True, **self.details}
 
 
 def by_arrival(deliveries: Sequence[Delivery]) -> list[Delivery]:
