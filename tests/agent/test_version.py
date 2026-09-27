@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -95,3 +96,15 @@ def test_the_bundled_prompt_is_found() -> None:
     assert "base.md" in prompts
     assert "<context>" not in prompts["base.md"]  # the context block is added per turn
     assert '{"reply":' in prompts["base.md"]
+
+
+def test_the_claim_type_is_not_shown_as_a_pipe_joined_placeholder() -> None:
+    """ "type": "booked|rescheduled|cancelled|offered" reads, to a real model, like an example value to
+    copy rather than an enum to pick one from; a model that copies it verbatim produces a "type" the code
+    silently drops (it is not one of the four kinds), losing the claim instead of checking it. The example
+    must show one concrete kind, with the four kinds spelled out separately in prose."""
+    base = prompt_files()["base.md"]
+    assert "booked|rescheduled" not in base
+    assert re.search(r'"type":\s*"booked"', base)
+    for kind in ("booked", "rescheduled", "cancelled", "offered"):
+        assert kind in base
