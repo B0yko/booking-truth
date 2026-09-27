@@ -131,6 +131,30 @@ def test_call_recorder_reads_plural_agent_usage_not_a_singular_field() -> None:
     assert calls.has_unknown_attribution() is False
 
 
+def test_call_recorder_does_not_count_a_turn_whose_code_path_never_called_the_model() -> None:
+    """A structured-action turn the agent handles entirely in code carries the bundled protocol's usage
+    shape too, but at its all-zero default (``booking_truth.agent.loop.Usage()``): it must not inflate
+    ``calls`` or ``unknown_attribution_calls`` - there is no LLM call here to be missing attribution."""
+    calls = CallRecorder()
+    calls.record_usage(
+        "agent:guarded",
+        {"models": [], "providers": [], "prompt_tokens": 0, "completion_tokens": 0, "usd": 0.0},
+    )
+    assert calls.to_json() == {}
+    assert calls.has_unknown_attribution() is False
+
+
+def test_call_recorder_still_counts_a_real_call_with_zero_cost_but_positive_tokens() -> None:
+    calls = CallRecorder()
+    calls.record_usage(
+        "agent:guarded",
+        {"models": [], "providers": [], "prompt_tokens": 120, "completion_tokens": 0, "usd": 0.0},
+    )
+    out = calls.to_json()["agent:guarded"]
+    assert out["calls"] == 1
+    assert out["unknown_attribution_calls"] == 1
+
+
 def test_call_recorder_has_unknown_attribution_is_false_with_full_attribution() -> None:
     calls = CallRecorder()
     calls.record("persona", model="vendor/a-2026", provider="p1")

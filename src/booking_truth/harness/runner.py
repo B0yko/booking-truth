@@ -751,6 +751,7 @@ class _Run:
                     # back to the lexicon belief.
                     async with self._extractor_cost_lock:
                         spent_before = float(getattr(config.llm_extractor, "usage_usd", 0.0))
+                        calls_before = len(getattr(config.llm_extractor, "calls_made", ()))
                         try:
                             llm = await config.llm_extractor.extract(
                                 texts, prospect_zone=prospect_zone, host_zone=host_zone, reference=started
@@ -759,6 +760,13 @@ class _Run:
                             extractor_usd = (
                                 float(getattr(config.llm_extractor, "usage_usd", 0.0)) - spent_before
                             )
+                            # Same isolation as the cost diff above: only this trial's own calls (the
+                            # normal attempt, plus a possible truncation retry) land between the two
+                            # reads, since no other trial's ``extract`` can complete inside this lock.
+                            for call_model, call_provider in list(
+                                getattr(config.llm_extractor, "calls_made", ())
+                            )[calls_before:]:
+                                self.calls.record("extractor", model=call_model, provider=call_provider)
             except Exception as exc:
                 harness_error = harness_error or f"extractor error: {_harness_bug(exc)}"
         belief = llm or lexicon
@@ -792,6 +800,9 @@ class _Run:
         persona_usd = round(persona.usage_usd, 6) if persona is not None else 0.0
         for reply in conversation.replies:
             self.calls.record_usage(f"agent:{agent.label}", reply.usage)
+        # This persona instance is fresh per trial, so every entry belongs to this trial alone.
+        for call_model, call_provider in getattr(persona, "calls_made", ()):
+            self.calls.record("persona", model=call_model, provider=call_provider)
         harness_fault_meta, harness_fault_injected = _harness_fault_meta(
             resolved.scenario.harness_fault if resolved is not None else None, conversation.fault
         )

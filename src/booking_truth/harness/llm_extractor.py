@@ -130,6 +130,11 @@ class LLMExtractor:
         self.llm = llm
         self.model = model
         self.usage_usd = 0.0
+        #: Every call's returned (model, provider), in order. This instance is shared across trials
+        #: (unlike ``LLMPersona``, fresh per trial), so the runner reads a diffed slice of this list -
+        #: the calls made since it last checked - into the manifest's ``CallRecorder``, under the same
+        #: lock it already uses to isolate this trial's own cost (``Runner._extractor_cost_lock``).
+        self.calls_made: list[tuple[str, str | None]] = []
 
     async def extract(
         self,
@@ -172,6 +177,7 @@ class LLMExtractor:
             component="extractor",
         )
         self.usage_usd += response.usage.usd
+        self.calls_made.append((response.model_returned, response.provider))
         return response
 
 

@@ -99,6 +99,19 @@ def suite_hash(directory: Path) -> str:
     return f"sha256:{digest.hexdigest()}"
 
 
+def _looks_like_a_call(usage: Mapping[str, Any]) -> bool:
+    """Whether ``usage`` shows any sign that an LLM call actually happened this turn: a positive token
+    count or cost, or a named model or provider. All false is exactly what a turn whose code path never
+    called the model produces (``Usage()``'s zero defaults) - the one case that must not be counted."""
+    if usage.get("models") or usage.get("providers"):
+        return True
+    for key in ("prompt_tokens", "completion_tokens", "usd"):
+        value = usage.get(key)
+        if isinstance(value, int | float) and not isinstance(value, bool) and value > 0:
+            return True
+    return False
+
+
 @dataclass
 class CallRecorder:
     """Returned model ids and upstream providers per component (``persona``, ``extractor``,
@@ -136,16 +149,26 @@ class CallRecorder:
         ``booking_truth.agent.loop.Usage.to_json``) are the distinct ids and providers every internal
         model call of that turn returned, already deduplicated by the agent - never a singular
         ``usage.model``/``usage.provider``, and a shape that carries neither key is not this protocol
-        at all, so it is ignored rather than counted (there is no evidence a call was even made). A
-        turn that does carry the plural shape is always counted once, even when both lists come back
-        empty: its models and providers each join the distinct sets (so ``varied`` is exact), and the
-        ``per_call`` breakdown pairs them positionally, which is exact for the common case of one
-        model and one provider throughout the turn and best-effort otherwise, since the wire format
-        does not preserve the true per-call pairing.
+        at all, so it is ignored rather than counted (there is no evidence a call was even made).
+
+        A turn whose own code path never called the model at all (for example a structured action the
+        agent handles without the LLM) reaches here too, with the plural shape present but every field
+        at its zero default (``booking_truth.agent.loop.Usage()``): that is not a call and must not be
+        counted, or every such turn would inflate ``unknown_attribution_calls`` with turns that were
+        never attributable to begin with. ``usage.prompt_tokens``/``completion_tokens``/``usd`` are the
+        signal a call actually happened (:func:`_looks_like_a_call`); only then is it counted, even when
+        both lists come back empty (still a real call - the cache-hit case a router reports with
+        neither field, which does belong in ``unknown_attribution_calls``). Its models and providers
+        each join the distinct sets (so ``varied`` is exact), and the ``per_call`` breakdown pairs them
+        positionally, which is exact for the common case of one model and one provider throughout the
+        turn and best-effort otherwise, since the wire format does not preserve the true per-call
+        pairing.
         """
         if not isinstance(usage, Mapping):
             return
         if "models" not in usage and "providers" not in usage:
+            return
+        if not _looks_like_a_call(usage):
             return
         models = [m for m in usage.get("models") or () if isinstance(m, str) and m]
         providers = [p for p in usage.get("providers") or () if isinstance(p, str) and p]

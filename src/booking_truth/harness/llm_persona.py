@@ -280,6 +280,10 @@ class LLMPersona:
         self.supports_actions = supports_actions
         self.turns = 0
         self.usage_usd = 0.0
+        #: Every call's returned (model, provider), in order; read by the runner into the manifest's
+        #: ``CallRecorder`` under the ``persona`` component (this instance is fresh per trial, so every
+        #: entry here belongs to this one trial - no diffing needed, unlike the shared ``LLMExtractor``).
+        self.calls_made: list[tuple[str, str | None]] = []
         self._system = _system_prompt(resolved)
         self._history: list[ChatMessage] = []
         self._ended = False
@@ -345,6 +349,7 @@ class LLMPersona:
             component="persona",
         )
         self.usage_usd += response.usage.usd
+        self.calls_made.append((response.model_returned, response.provider))
         return response
 
     def _accepted_instant(

@@ -17,9 +17,10 @@ from stub_agent import SANDBOX_TOKEN, bundled_agent, running_stub
 
 from booking_truth.harness.beliefs import Belief, BeliefSource
 from booking_truth.harness.lexicon_extractor import LexiconBeliefExtractor
+from booking_truth.harness.personas import AgentView, ScriptedPersona
 from booking_truth.harness.report import MANIFEST_FILE, TRACES_FILE
 from booking_truth.harness.runner import AgentUnderTest, RunConfig, run
-from booking_truth.harness.scenarios import load_suite, select_scenarios
+from booking_truth.harness.scenarios import ResolvedScenario, load_suite, select_scenarios
 from booking_truth.llm.types import LLMError
 from booking_truth.sandbox.app import create_sandbox_app
 from booking_truth.serve import BackgroundServer
@@ -36,12 +37,14 @@ class FakeExtractor:
 
     def __init__(self) -> None:
         self.usage_usd = 0.0
+        self.calls_made: list[tuple[str, str | None]] = []
         self._lexicon = LexiconBeliefExtractor()
 
     async def extract(
         self, agent_messages: Sequence[str], *, prospect_zone: str, host_zone: str, reference: datetime
     ) -> Belief:
         self.usage_usd += 0.0021
+        self.calls_made.append(("fake/extractor-model", "fake-provider"))
         belief = await self._lexicon.extract(
             agent_messages, prospect_zone=prospect_zone, host_zone=host_zone, reference=reference
         )
@@ -89,10 +92,73 @@ async def test_the_runner_switches_to_llm_grading_when_an_extractor_is_configure
     assert manifest["grading"]["extractor"] == "llm"
     assert manifest["grading"]["persona"] == "scripted"  # no persona_factory: still the scripted persona
     assert manifest["models"]["extractor"] == "fake/extractor-model"
+    # The extractor's own calls (run-1 defect 6: only the agent's turns were ever attributed) land in the
+    # manifest's llm_calls under "extractor", not folded into "agent:stub" or dropped altogether.
+    assert manifest["llm_calls"]["extractor"]["calls"] == 1
+    assert manifest["llm_calls"]["extractor"]["models_returned"] == ["fake/extractor-model"]
+    assert manifest["llm_calls"]["extractor"]["providers"] == ["fake-provider"]
+    assert "persona" not in manifest["llm_calls"]  # no persona_factory: nothing to attribute
 
     traces = [record for _, record in iter_jsonl(out / TRACES_FILE)]
     final = next(t for t in traces if t["meta"]["final_attempt"])
     assert final["meta"]["claims_source"] == "llm"
+
+
+class RecordingPersona:
+    """Wraps a scripted persona, recording a fake (model, provider) pair per turn as ``LLMPersona`` would
+    from a real call - a stand-in that drives the same conversation without any HTTP, so the runner's
+    manifest wiring for the ``persona`` component can be checked in isolation."""
+
+    def __init__(self, resolved: ResolvedScenario, supports_actions: bool) -> None:
+        self._inner = ScriptedPersona(resolved, supports_actions=supports_actions)
+        self.calls_made: list[tuple[str, str | None]] = []
+
+    @property
+    def turns(self) -> int:
+        return self._inner.turns
+
+    @property
+    def usage_usd(self) -> float:
+        return self._inner.usage_usd
+
+    async def next_turn(self, view: AgentView) -> object:
+        turn = await self._inner.next_turn(view)
+        if turn is not None:
+            self.calls_made.append(("fake/persona-model", "fake-provider"))
+        return turn
+
+
+async def test_persona_calls_are_attributed_in_the_manifest_too(sandbox_url: str, tmp_path: Path) -> None:
+    out = tmp_path / "run"
+    with running_stub(sandbox_url) as (_, base):
+        agent = bundled_agent("stub", base, sandbox_url)
+        config = RunConfig(
+            agents=[agent],
+            scenarios=select_scenarios(SUITE, ["happy-book-host-zone"]),
+            suite_scenarios=SUITE,
+            k=1,
+            run_id="persona-wiring-run",
+            out_dir=out,
+            settle_s=3,
+            stable_s=0.15,
+            hardware="test machine, 1 GB",
+            sandbox_token=SANDBOX_TOKEN,
+            command="booking-truth test --agent http://localhost:8000/v1/chat --sandbox http://localhost:8100",
+            persona_factory=RecordingPersona,
+            persona_model="fake/persona-model",
+        )
+        result = await run(config)
+
+    assert result.status == "complete"
+    assert result.results[0].outcome == "pass"
+    manifest = json.loads((out / MANIFEST_FILE).read_text())
+    assert manifest["grading"]["persona"] == "llm"
+    persona_calls = manifest["llm_calls"]["persona"]
+    assert persona_calls["calls"] > 0
+    assert persona_calls["models_returned"] == ["fake/persona-model"]
+    assert persona_calls["providers"] == ["fake-provider"]
+    assert persona_calls["unknown_attribution_calls"] == 0
+    assert manifest["llm_attribution_incomplete"] is False
 
 
 class ConcurrentCostExtractor:
