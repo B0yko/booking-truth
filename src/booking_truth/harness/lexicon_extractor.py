@@ -441,7 +441,7 @@ def classify(clause: str) -> Category | None:
             continue
         if category == "failure" and _crm_only_failure(text):
             continue
-        if category == "booked" and _FUTURE_BOOKING_PROMISE.search(text):
+        if category == "booked" and _only_future_booking_promise(text):
             continue
         if any(p.search(text) for p in patterns):
             if category == "retraction" and _restates_empty(text) and any(p.search(text) for p in CANCELLED):
@@ -454,6 +454,18 @@ def _crm_only_failure(text: str) -> bool:
     """The clause reports a CRM failure and no other failure."""
     stripped = CRM_FAILURE.sub(" ", text)
     return stripped != text and not any(p.search(stripped) for p in FAILURE)
+
+
+def _only_future_booking_promise(text: str) -> bool:
+    """The clause's only booked-shaped signal is a forward-looking promise ("get you booked for Monday"):
+    with the promise's own span removed, no other completed-booking pattern remains. A clause can join a
+    genuine claim and an unrelated promise about a *different* meeting with "and" or a plain comma
+    (neither splits it into separate clauses, unlike "but"/"however"/a dash/a semicolon), so checking only
+    "does a promise appear somewhere in this clause" would blot out that other, real claim; this checks
+    what is left once the promise's own words are taken out, the same test :func:`_crm_only_failure` runs
+    for a CRM-only failure."""
+    stripped = _FUTURE_BOOKING_PROMISE.sub(" ", text)
+    return stripped != text and not any(p.search(stripped) for p in BOOKED)
 
 
 def _is_bare_see_you_close(text: str) -> bool:

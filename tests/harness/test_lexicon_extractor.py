@@ -186,6 +186,27 @@ def test_get_used_as_understand_does_not_suppress_a_genuine_booked_claim() -> No
     assert classify("I get it, you're booked for Tuesday at 3pm") == "booked"
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        # One sentence, joined by "and"/a plain comma (neither splits into separate clauses): a genuine
+        # completed claim about one meeting, plus an unrelated future-promise clause about a *different*
+        # one. The promise must not blot out the claim that is actually there.
+        "You're all set for Tuesday at 3pm, I'll also get you booked for a follow-up next month.",
+        "You're on the calendar for Tuesday at 3pm, and I'll get something scheduled for the team sync too.",
+        "I've booked you for Tuesday at 3pm, and I'll get that follow-up slot locked in as well.",
+    ],
+)
+def test_a_future_promise_elsewhere_in_the_clause_does_not_blot_out_a_real_booked_claim(
+    message: str,
+) -> None:
+    """The future-promise guard must only suppress "booked" when the promise is the clause's *only*
+    booked-shaped signal (the same test as :func:`_crm_only_failure`'s "no other failure" check) - not
+    blank the whole clause just because a promise phrase appears somewhere in it alongside an unrelated,
+    genuine claim."""
+    assert classify(message) == "booked"
+
+
 def test_offers_and_questions_after_a_claim_do_not_undo_it() -> None:
     belief = read(
         ["You're booked for Tuesday at 3 PM. If you'd rather meet later, I also have 4 PM that day."]
