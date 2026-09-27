@@ -1,6 +1,7 @@
 """``Runner.converse``'s harness-side fault injection (``docs/metrics.md``, "Harness-side faults"):
-``concurrent_channel`` defers to a later pick when the current one does not yet know enough offered
-slots, is never injected at all when no pick in the whole conversation does (instead of crashing, run-1
+``concurrent_channel`` fires on the first pick that knows any offered slot at all (asking for the second
+offered slot, or the same slot when only one was offered), defers only past a pick that knows none yet,
+is never injected at all when no pick in the whole conversation ever does (instead of crashing, run-1
 defect 2), and the trace/``TrialResult`` record that honestly.
 """
 
@@ -79,9 +80,13 @@ def test_duplicate_delivery_is_always_ready() -> None:
     assert _fault_ready(fault, PersonaTurn("pick", "x", choices=()))
 
 
-def test_concurrent_channel_needs_more_offers_than_its_pick_index() -> None:
+def test_concurrent_channel_is_ready_once_any_offer_is_known() -> None:
+    """Run-2 anomaly: deferring until a *second* offer was known meant the fault was skipped outright in
+    3 of 5 naive trials that only ever offered one slot at a time (``harness_fault_not_injected``). It
+    only needs to know *some* offer, so it can ask for that same one when there is no second."""
     fault = HarnessFault(type="concurrent_channel", pick=1)
-    assert not _fault_ready(fault, PersonaTurn("pick", "x", choices=(OFFER_0,)))
+    assert not _fault_ready(fault, PersonaTurn("pick", "x", choices=()))
+    assert _fault_ready(fault, PersonaTurn("pick", "x", choices=(OFFER_0,)))
     assert _fault_ready(fault, PersonaTurn("pick", "x", choices=(OFFER_0, OFFER_1)))
 
 
@@ -108,45 +113,41 @@ def test_harness_fault_meta_reports_a_configured_fault_that_never_fired() -> Non
 # Runner.converse: the fault-gating behaviour end to end -----------------------------------------------------
 
 
-async def test_concurrent_channel_defers_past_a_pick_with_too_few_offers() -> None:
-    """The first pick knows only one offer (``pick`` defaults to 1, so it needs a second): the fault must
-    not fire there, and must fire on the next pick once it does."""
+async def test_concurrent_channel_fires_on_the_first_pick_that_knows_any_offer() -> None:
+    """Run-2 anomaly: the first pick already knows one offer (``pick`` defaults to 1, asking for a second
+    one), so the fault must fire right there, asking for ``offered[0]`` (the only offer known) instead of
+    waiting for a pick that knows two - the deferral this fix narrows to "no offer known at all"."""
     runner = make_runner()
     resolved = resolved_concurrent_channel()
     conversation = Conversation(session_a="sess-a")
     client = _FakeClient()
     persona = _ScriptedFakePersona(
-        [
-            PersonaTurn("pick", "first works", offer=OFFER_0, choices=(OFFER_0,)),
-            PersonaTurn("pick", "second works", offer=OFFER_1, choices=(OFFER_0, OFFER_1), end=True),
-        ]
+        [PersonaTurn("pick", "first works", offer=OFFER_0, choices=(OFFER_0,), end=True)]
     )
     agent = AgentUnderTest(label="test", endpoints=[])
     await runner.converse(agent, client, persona, LEAD, resolved, conversation, random.Random(0))
     assert conversation.fault is not None
     assert conversation.fault.type == "concurrent_channel"
-    # The first pick sent one message (no fault); the second pick's fault sent both channels.
-    assert len(client.sent) == 3
+    assert conversation.fault.details["requested_offer"] == 1  # the scenario's configured pick
+    assert conversation.fault.details["offer_used"] == 0  # only one offer known: the same slot instead
+    # The single pick fires the fault immediately: both channels contacted on it, no earlier unfaulted turn.
+    assert len(client.sent) == 2
     assert conversation.sessions == ["sess-a", "sess-a-b"]
 
 
 async def test_concurrent_channel_is_never_injected_without_a_pick_that_qualifies() -> None:
-    """No pick in the whole conversation ever knows more than one offer: the fault is skipped, not
-    crashed (run-1 defect 2), and the record says so rather than looking like no fault was configured."""
+    """No pick in the whole conversation ever knows any offer at all (a freeform acceptance the harness
+    could not match to a known offer): the fault is skipped, not crashed (run-1 defect 2), and the record
+    says so rather than looking like no fault was configured."""
     runner = make_runner()
     resolved = resolved_concurrent_channel()
     conversation = Conversation(session_a="sess-a")
     client = _FakeClient()
-    persona = _ScriptedFakePersona(
-        [
-            PersonaTurn("pick", "first works", offer=OFFER_0, choices=(OFFER_0,)),
-            PersonaTurn("say", "thanks, bye", end=True),
-        ]
-    )
+    persona = _ScriptedFakePersona([PersonaTurn("pick", "works for me", offer=OFFER_0, choices=(), end=True)])
     agent = AgentUnderTest(label="test", endpoints=[])
     await runner.converse(agent, client, persona, LEAD, resolved, conversation, random.Random(0))
     assert conversation.fault is None
-    assert len(client.sent) == 2
+    assert len(client.sent) == 1
     assert conversation.sessions == ["sess-a"]  # session B was never contacted
     meta, injected = _harness_fault_meta(resolved.scenario.harness_fault, conversation.fault)
     assert meta == {"type": "concurrent_channel", "injected": False}

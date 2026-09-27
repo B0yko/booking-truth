@@ -352,13 +352,14 @@ def _fault_ready(fault: HarnessFault, step: PersonaTurn) -> bool:
     """Whether this pick knows enough offered slots to inject ``fault``.
 
     ``duplicate_delivery`` resends the same message regardless of how many slots were offered.
-    ``concurrent_channel`` asks the second channel for ``offered[fault.pick]``, so it needs a *different*
-    slot from the one this pick accepts: with fewer than ``fault.pick + 1`` offers known, injecting it now
-    would silently ask for the same (or, before this fix, crash outright); the caller defers to a later
-    pick instead."""
+    ``concurrent_channel`` asks the second channel for ``offered[fault.pick]`` when that many are known,
+    else the last offer known (:func:`~booking_truth.harness.hfaults.concurrent_message`), so it only
+    needs *some* offer to be known - one is enough to ask for that same slot. With none known at all,
+    injecting it now has nothing to ask for; the caller defers to a later pick instead, and skips the
+    fault outright if no pick in the whole conversation ever knows one."""
     if fault.type != "concurrent_channel":
         return True
-    return len(step.choices) > fault.pick
+    return len(step.choices) >= 1
 
 
 def _harness_fault_meta(

@@ -82,8 +82,10 @@ def test_the_fault_table_footnotes_a_harness_fault_that_never_fired(tmp_path: Pa
     report = (out / REPORT_FILE).read_text()
     footnote = next(line for line in report.splitlines() if line.startswith("Harness-side fault"))
     assert footnote == (
-        "Harness-side fault (`duplicate_delivery`/`concurrent_channel`) never fired in at least one valid "
-        "trial of: `fault-concurrent-channel` (see that trial's `meta.harness_fault` in `traces.jsonl`)."
+        "Harness-side fault (`duplicate_delivery` fires unconditionally on the first pick; "
+        "`concurrent_channel` fires on the first pick that knows any offered slot) never fired in at "
+        "least one valid trial of: `fault-concurrent-channel` (see that trial's `meta.harness_fault` in "
+        "`traces.jsonl`)."
     )
 
 

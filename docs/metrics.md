@@ -70,10 +70,10 @@ Two faults are injected by the harness, not the sandbox, on one of the persona's
   the first is still in flight. Both replies are recorded; the persona continues from the one that arrived last. It
   fires on the persona's first pick, unconditionally.
 - `concurrent_channel` sends, at the same moment, a scripted message for the same lead on a new `session_id` with
-  `channel=webhook`, asking for the second offered slot. A pass means exactly one active booking that matches the
-  belief taken from both sessions. Asking for the second offered slot needs at least two slots to have been offered
-  by the pick it fires on, so it fires on the first pick that already knows that many, deferring past an earlier one
-  that does not; if no pick in the whole conversation ever does, it is skipped rather than injected. The trial's
+  `channel=webhook`, asking for the second offered slot, or the same slot when only one was offered. A pass means
+  exactly one active booking that matches the belief taken from both sessions. It needs at least one slot to have
+  been offered by the pick it fires on, so it fires on the first pick that knows any, deferring past an earlier one
+  that knows none; if no pick in the whole conversation ever does, it is skipped rather than injected. The trial's
   record says whether a configured harness fault actually fired (`harness_fault_injected`).
 
 ## Outcome of a trial

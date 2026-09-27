@@ -6,10 +6,10 @@ Both fire on one of the persona's picks of an offered slot:
   first, while the first may still be in flight. Both replies are recorded; the persona continues from the one
   that arrived last. It fires on the persona's first pick, unconditionally.
 - ``concurrent_channel`` sends, at the same moment, a scripted message for the same lead on a new session over
-  the ``webhook`` channel, asking for another offered slot. Both replies are recorded; the persona continues
-  in its own session. It needs a pick that already knows enough offered slots to ask for a different one, so
-  the runner (``runner.py``'s ``_fault_ready``) defers it past an earlier pick that does not, and skips it
-  outright if none in the whole conversation ever qualifies.
+  the ``webhook`` channel, asking for the second offered slot, or the same slot when only one was offered.
+  Both replies are recorded; the persona continues in its own session. It needs a pick that already knows
+  at least one offered slot, so the runner (``runner.py``'s ``_fault_ready``) defers it past an earlier pick
+  that knows none, and skips it outright if no pick in the whole conversation ever does.
 """
 
 from __future__ import annotations

@@ -326,8 +326,9 @@ def render_report(summary: Mapping[str, Any], manifest: Mapping[str, Any]) -> st
         if not_injected:
             lines += [
                 "",
-                "Harness-side fault (`duplicate_delivery`/`concurrent_channel`) never fired in at least "
-                "one valid trial of: "
+                "Harness-side fault (`duplicate_delivery` fires unconditionally on the first pick; "
+                "`concurrent_channel` fires on the first pick that knows any offered slot) never fired "
+                "in at least one valid trial of: "
                 + ", ".join(f"`{s}`" for s in not_injected)
                 + " (see that trial's `meta.harness_fault` in `traces.jsonl`).",
             ]
