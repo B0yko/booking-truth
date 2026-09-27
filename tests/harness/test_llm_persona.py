@@ -15,7 +15,7 @@ import pytest
 import respx
 
 from booking_truth.harness.adapters import AgentReply
-from booking_truth.harness.llm_persona import LLMPersona
+from booking_truth.harness.llm_persona import PERSONA_MAX_TOKENS, LLMPersona
 from booking_truth.harness.personas import AgentView, PersonaError
 from booking_truth.harness.scenarios import ResolvedScenario, Scenario, load_suite
 from booking_truth.llm.client import OpenAICompatClient
@@ -71,6 +71,19 @@ def mock_turn(router: respx.MockRouter, payload: dict[str, Any]) -> respx.Route:
         "usage": {"prompt_tokens": 100, "completion_tokens": 40},
     }
     return router.post("/chat/completions").mock(return_value=httpx.Response(200, json=body))
+
+
+def _raw_body(content: str, *, finish_reason: str | None = None) -> dict[str, Any]:
+    message: dict[str, Any] = {"role": "assistant", "content": content}
+    choice: dict[str, Any] = {"index": 0, "message": message}
+    if finish_reason is not None:
+        choice["finish_reason"] = finish_reason
+    return {
+        "id": "gen-1",
+        "model": MODEL,
+        "choices": [choice],
+        "usage": {"prompt_tokens": 100, "completion_tokens": PERSONA_MAX_TOKENS},
+    }
 
 
 def reply(text: str, quick: tuple[dict[str, Any], ...] = ()) -> AgentReply:
@@ -209,4 +222,30 @@ async def test_a_persistent_server_error_propagates_after_retries(
     with pytest.raises(LLMError, match="HTTP 500"):
         await persona.next_turn(AgentView(None, [], NOW))
     assert route.call_count == 3  # the first attempt plus two retries
+    await client.aclose()
+
+
+async def test_a_truncated_turn_is_retried_once_with_double_the_token_budget(
+    router: respx.MockRouter, tmp_path: Path
+) -> None:
+    truncated = '{"message": "I can do Monday at 2 PM or maybe Tuesday if that d'
+    full = json.dumps({"message": "I can do Monday at 2 PM.", "accepts": None, "end": False})
+    route = router.post("/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_raw_body(truncated, finish_reason="length")),
+            httpx.Response(200, json=_raw_body(full, finish_reason="stop")),
+        ]
+    )
+    client = make_client(tmp_path / "ledger")
+    persona = LLMPersona(resolved(), client, model=MODEL)
+    turn = await persona.next_turn(AgentView(None, [], NOW))
+    assert turn is not None
+    assert turn.text == "I can do Monday at 2 PM."
+    assert route.call_count == 2
+    first_sent = json.loads(route.calls[0].request.content)
+    second_sent = json.loads(route.calls[1].request.content)
+    assert first_sent["max_tokens"] == PERSONA_MAX_TOKENS
+    assert second_sent["max_tokens"] == PERSONA_MAX_TOKENS * 2
+    # The retried turn still appends exactly one persona message to the conversation history, not two.
+    assert persona.turns == 1
     await client.aclose()

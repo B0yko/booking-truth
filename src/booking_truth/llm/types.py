@@ -188,6 +188,20 @@ class LLMResponse:
         return ChatMessage.assistant(content, self.tool_calls)
 
 
+def content_looks_truncated(response: LLMResponse) -> bool:
+    """Whether ``response`` looks cut off by the token budget rather than a complete, merely wrong,
+    answer: a caller expecting a JSON object can use this to decide whether a parse failure is worth
+    retrying with a larger ``max_tokens`` (resending an identical request at temperature 0 would just
+    fail again identically). ``finish_reason: "length"`` is the definitive signal; failing that, a
+    non-empty response that does not end in a closing brace is a reasonable proxy for a response cut
+    off mid-value, since a complete JSON object always ends with one.
+    """
+    if response.finish_reason == "length":
+        return True
+    content = (response.content or "").rstrip()
+    return bool(content) and not content.endswith("}")
+
+
 class LLM(Protocol):
     """A chat model with tool calling. Implemented by ``OpenAICompatClient`` and the offline ``FakeLLM``."""
 

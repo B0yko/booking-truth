@@ -14,7 +14,7 @@ import httpx
 import pytest
 import respx
 
-from booking_truth.harness.llm_extractor import LLMExtractor, local_to_utc
+from booking_truth.harness.llm_extractor import EXTRACTOR_MAX_TOKENS, LLMExtractor, local_to_utc
 from booking_truth.llm.client import OpenAICompatClient
 from booking_truth.llm.ledger import CostLedger
 from booking_truth.llm.pricing import PriceTable
@@ -58,6 +58,19 @@ def mock_reply(router: respx.MockRouter, payload: dict[str, Any]) -> respx.Route
         "usage": {"prompt_tokens": 200, "completion_tokens": 60},
     }
     return router.post("/chat/completions").mock(return_value=httpx.Response(200, json=body))
+
+
+def _raw_body(content: str, *, finish_reason: str | None = None) -> dict[str, Any]:
+    message: dict[str, Any] = {"role": "assistant", "content": content}
+    choice: dict[str, Any] = {"index": 0, "message": message}
+    if finish_reason is not None:
+        choice["finish_reason"] = finish_reason
+    return {
+        "id": "gen-1",
+        "model": MODEL,
+        "choices": [choice],
+        "usage": {"prompt_tokens": 200, "completion_tokens": EXTRACTOR_MAX_TOKENS},
+    }
 
 
 # Local time <-> UTC conversion -------------------------------------------------------------------------
@@ -192,6 +205,72 @@ async def test_ledger_entries_are_recorded_under_the_extractor_component(
     assert len(entries) == 1
     assert entries[0]["component"] == "extractor"
     assert entries[0]["usd"] > 0
+
+
+async def test_a_truncated_answer_is_retried_once_with_double_the_token_budget(
+    router: respx.MockRouter, tmp_path: Path
+) -> None:
+    # A response cut off mid-string by the token budget: valid JSON up to the point the model ran out of
+    # tokens for a chatty "evidence" field, `finish_reason: "length"`, no closing brace.
+    truncated = '{"status": "booked", "time": null, "offered": [], "evidence": "You\'re all set, I just'
+    full = json.dumps(
+        {"status": "booked", "time": None, "offered": [], "evidence": "You're all set for Tuesday."}
+    )
+    route = router.post("/chat/completions").mock(
+        side_effect=[
+            httpx.Response(200, json=_raw_body(truncated, finish_reason="length")),
+            httpx.Response(200, json=_raw_body(full, finish_reason="stop")),
+        ]
+    )
+    client = make_client(tmp_path / "ledger")
+    extractor = LLMExtractor(client, model=MODEL)
+    belief = await extractor.extract(
+        ["You're all set for Tuesday."],
+        prospect_zone="Europe/Berlin",
+        host_zone="America/New_York",
+        reference=REFERENCE,
+    )
+    assert belief.status == "booked"
+    assert route.call_count == 2
+    first_sent = json.loads(route.calls[0].request.content)
+    second_sent = json.loads(route.calls[1].request.content)
+    assert first_sent["max_tokens"] == EXTRACTOR_MAX_TOKENS
+    assert second_sent["max_tokens"] == EXTRACTOR_MAX_TOKENS * 2
+    # The retry is billed too: both calls' cost is kept, neither dropped nor double-counted.
+    entries = CostLedger(tmp_path / "ledger", "extractor").entries()
+    assert len(entries) == 2
+    await client.aclose()
+
+
+async def test_a_truncated_answer_still_broken_after_retry_raises(
+    router: respx.MockRouter, tmp_path: Path
+) -> None:
+    truncated = '{"status": "booked", "time": null, "offered": [], "evidence": "still cut off'
+    router.post("/chat/completions").mock(
+        return_value=httpx.Response(200, json=_raw_body(truncated, finish_reason="length"))
+    )
+    client = make_client(tmp_path / "ledger")
+    extractor = LLMExtractor(client, model=MODEL)
+    with pytest.raises(LLMError, match="invalid JSON"):
+        await extractor.extract(
+            ["hi"], prospect_zone="Europe/Berlin", host_zone="America/New_York", reference=REFERENCE
+        )
+    await client.aclose()
+
+
+async def test_a_complete_but_invalid_answer_is_not_retried(router: respx.MockRouter, tmp_path: Path) -> None:
+    """A well-formed response with the wrong content (not a truncation) is a bad model output, not a
+    token-budget problem: resending the identical request at temperature 0 would fail again identically,
+    so it must not be retried."""
+    route = mock_reply(router, {"status": "maybe", "time": None, "offered": [], "evidence": ""})
+    client = make_client(tmp_path / "ledger")
+    extractor = LLMExtractor(client, model=MODEL)
+    with pytest.raises(LLMError, match="valid 'status'"):
+        await extractor.extract(
+            ["hi"], prospect_zone="Europe/Berlin", host_zone="America/New_York", reference=REFERENCE
+        )
+    assert route.call_count == 1
+    await client.aclose()
 
 
 async def test_a_persistent_server_error_propagates_after_retries(

@@ -33,7 +33,7 @@ from booking_truth.harness.adapters import AgentReply
 from booking_truth.harness.personas import AgentView, Offer, PersonaError, PersonaTurn, reply_offers
 from booking_truth.harness.scenarios import ResolvedScenario, date_text, dates_text
 from booking_truth.harness.timeparse import TimeSpan, find_times
-from booking_truth.llm.types import LLM, ChatMessage, LLMError
+from booking_truth.llm.types import LLM, ChatMessage, LLMError, LLMResponse, content_looks_truncated
 from booking_truth.timeutil import iso_z
 
 PERSONA_TEMPERATURE = 0.7
@@ -217,16 +217,19 @@ class LLMPersona:
             self._history.append(ChatMessage.user(_annotate(view.last_reply.reply or "", offers)))
         else:
             self._history.append(ChatMessage.user(_OPENING_CUE))
-        response = await self.llm.chat(
-            messages=[ChatMessage.system(self._system), *self._history],
-            temperature=PERSONA_TEMPERATURE,
-            model=self.model,
-            max_tokens=PERSONA_MAX_TOKENS,
-            response_format=_TIME_SCHEMA,
-            component="persona",
-        )
-        self.usage_usd += response.usage.usd
-        payload = _parse(response.content)
+        messages = [ChatMessage.system(self._system), *self._history]
+        response = await self._chat(messages, PERSONA_MAX_TOKENS)
+        try:
+            payload = _parse(response.content)
+        except LLMError as exc:
+            if exc.kind != "malformed" or not content_looks_truncated(response):
+                raise
+            # A truncated structured turn is a token-budget problem, not a bad model: resending the
+            # identical request would very likely fail again identically (persona replies run at
+            # temperature 0.7, so this is not guaranteed, but doubling the budget fixes the actual cause
+            # either way), so retry once with a larger budget instead of repeating it as is.
+            response = await self._chat(messages, PERSONA_MAX_TOKENS * 2)
+            payload = _parse(response.content)
         message = payload["message"].strip()
         self._history.append(ChatMessage.assistant(message))
         self.turns += 1
@@ -242,6 +245,18 @@ class LLMPersona:
             action = {"type": "select_slot", "slot_id": chosen.slot_id}
         self._ended = end
         return PersonaTurn("pick", message, action=action, offer=chosen, end=end, choices=tuple(offers))
+
+    async def _chat(self, messages: Sequence[ChatMessage], max_tokens: int) -> LLMResponse:
+        response = await self.llm.chat(
+            messages=messages,
+            temperature=PERSONA_TEMPERATURE,
+            model=self.model,
+            max_tokens=max_tokens,
+            response_format=_TIME_SCHEMA,
+            component="persona",
+        )
+        self.usage_usd += response.usage.usd
+        return response
 
     def _accepted_instant(
         self,

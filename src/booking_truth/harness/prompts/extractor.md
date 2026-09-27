@@ -50,6 +50,8 @@ proposed no specific times.
 
 ## Evidence
 
-`evidence` is the exact sentence or clause that decided the status (empty string if truly nothing did).
+`evidence` is a single short quote from the text that decided the status: at most 25 words, one sentence or
+clause, never a paraphrase and never more than one quote (empty string if truly nothing did). Keep it short
+even when the deciding statement is longer: quote only the part that carries the status.
 
 Read only the agent's own messages, given below as `Message 1`, `Message 2`, and so on, in order.

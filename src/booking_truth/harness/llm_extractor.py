@@ -6,6 +6,11 @@ model: ``{"status": ..., "time": {"local": "YYYY-MM-DDTHH:MM", "zone": "..."} | 
 local time to UTC itself, with :mod:`zoneinfo`: a local time a daylight-saving gap skips over is rejected
 (dropped), and a time a fold makes ambiguous takes the earlier instant.
 
+A response the token budget cuts off mid-answer is retried once, at double the budget, instead of being
+retried identically at the harness's attempt level: temperature 0 means an identical request would fail
+again identically, wasting spend and budget headroom for no gain (see :func:`content_looks_truncated
+<booking_truth.llm.types.content_looks_truncated>`).
+
 Implements :class:`~booking_truth.harness.beliefs.BeliefExtractor`, independent of the agent's own claim
 guard (``booking_truth.agent.guards``): it shares no code with it, only the plain :class:`Belief` value type
 both sides of the harness use.
@@ -21,11 +26,11 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from booking_truth.harness.beliefs import BELIEF_STATUSES, Belief, BeliefSource
-from booking_truth.llm.types import LLM, ChatMessage, LLMError
+from booking_truth.llm.types import LLM, ChatMessage, LLMError, LLMResponse, content_looks_truncated
 from booking_truth.timeutil import ensure_utc
 
 EXTRACTOR_TEMPERATURE = 0.0
-EXTRACTOR_MAX_TOKENS = 600
+EXTRACTOR_MAX_TOKENS = 1200
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "extractor.md"
 
 _LOCAL_TIME_SCHEMA: dict[str, Any] = {
@@ -136,16 +141,18 @@ class LLMExtractor:
     ) -> Belief:
         reference = ensure_utc(reference)
         system = _system_prompt(prospect_zone=prospect_zone, host_zone=host_zone, reference=reference)
-        response = await self.llm.chat(
-            messages=[ChatMessage.system(system), ChatMessage.user(_user_message(agent_messages))],
-            temperature=EXTRACTOR_TEMPERATURE,
-            model=self.model,
-            max_tokens=EXTRACTOR_MAX_TOKENS,
-            response_format=_SCHEMA,
-            component="extractor",
-        )
-        self.usage_usd += response.usage.usd
-        data = _parse(response.content)
+        messages = [ChatMessage.system(system), ChatMessage.user(_user_message(agent_messages))]
+        response = await self._chat(messages, EXTRACTOR_MAX_TOKENS)
+        try:
+            data = _parse(response.content)
+        except LLMError as exc:
+            if exc.kind != "malformed" or not content_looks_truncated(response):
+                raise
+            # A truncated structured answer is a token-budget problem, not a bad model: resending the
+            # identical request at temperature 0 would fail again identically, so retry once with a
+            # larger budget instead of repeating it.
+            response = await self._chat(messages, EXTRACTOR_MAX_TOKENS * 2)
+            data = _parse(response.content)
         offered = {t for item in data.get("offered") or () if (t := _time_utc(item)) is not None}
         return Belief(
             status=data["status"],
@@ -154,6 +161,18 @@ class LLMExtractor:
             source="llm",
             evidence=str(data.get("evidence") or ""),
         )
+
+    async def _chat(self, messages: Sequence[ChatMessage], max_tokens: int) -> LLMResponse:
+        response = await self.llm.chat(
+            messages=messages,
+            temperature=EXTRACTOR_TEMPERATURE,
+            model=self.model,
+            max_tokens=max_tokens,
+            response_format=_SCHEMA,
+            component="extractor",
+        )
+        self.usage_usd += response.usage.usd
+        return response
 
 
 __all__ = ["LLMExtractor", "local_to_utc"]
