@@ -1,0 +1,218 @@
+{
+  "agents": [
+    {
+      "agent_version": "a7e96fe8fee9",
+      "calendar": "calcom",
+      "endpoints": 3,
+      "guards": "all",
+      "kind": "http",
+      "label": "guarded",
+      "mode": "guarded",
+      "model": "deepseek/deepseek-v4-flash",
+      "protocol": "bundled",
+      "source_hash": "45a852f88d213f5c231cf3a610f4cc447766089674ebe0e81475e3d039c0d482",
+      "target": "http://localhost:8201/v1/chat",
+      "temperature": 0.2,
+      "version_info": {
+        "agent_version": "a7e96fe8fee9",
+        "calendar": "calcom",
+        "crm": "hubspot",
+        "guards": "all",
+        "model": "deepseek/deepseek-v4-flash",
+        "offline": false,
+        "source_hash": "45a852f88d213f5c231cf3a610f4cc447766089674ebe0e81475e3d039c0d482",
+        "temperature": 0.2,
+        "version": "0.1.0"
+      },
+      "versions_seen": [
+        "a7e96fe8fee9"
+      ]
+    },
+    {
+      "agent_version": "f946e239d19a",
+      "calendar": "calcom",
+      "endpoints": 3,
+      "guards": "off",
+      "kind": "http",
+      "label": "naive",
+      "mode": "naive",
+      "model": "deepseek/deepseek-v4-flash",
+      "protocol": "bundled",
+      "source_hash": "45a852f88d213f5c231cf3a610f4cc447766089674ebe0e81475e3d039c0d482",
+      "target": "http://localhost:8211/v1/chat",
+      "temperature": 0.2,
+      "version_info": {
+        "agent_version": "f946e239d19a",
+        "calendar": "calcom",
+        "crm": "hubspot",
+        "guards": "off",
+        "model": "deepseek/deepseek-v4-flash",
+        "offline": false,
+        "source_hash": "45a852f88d213f5c231cf3a610f4cc447766089674ebe0e81475e3d039c0d482",
+        "temperature": 0.2,
+        "version": "0.1.0"
+      },
+      "versions_seen": [
+        "f946e239d19a"
+      ]
+    }
+  ],
+  "as_of": "2026-09-27",
+  "command": "booking-truth test --pool bench-pool.yaml --k 5 --grade-crm --as-of 2026-09-27 --hardware 'MacBook Air M5, 24 GB' --budget-usd 2",
+  "date": "2026-09-27",
+  "dry_run": false,
+  "git": {
+    "dirty": true,
+    "sha": "c30e8c54c5ca125929630bd23474423b89937097"
+  },
+  "grading": {
+    "extractor": "llm",
+    "label": "LLM grading",
+    "mode": "llm",
+    "persona": "llm",
+    "reason": null
+  },
+  "hardware": "MacBook Air M5, 24 GB",
+  "harness_version": "0.1.0",
+  "k": 5,
+  "llm_attribution_incomplete": false,
+  "llm_calls": {
+    "agent:guarded": {
+      "calls": 360,
+      "models_returned": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "per_call": [
+        {
+          "calls": 360,
+          "model": "deepseek/deepseek-v4-flash",
+          "provider": "DeepInfra"
+        }
+      ],
+      "providers": [
+        "DeepInfra"
+      ],
+      "unknown_attribution_calls": 0,
+      "varied": false
+    },
+    "agent:naive": {
+      "calls": 477,
+      "models_returned": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "per_call": [
+        {
+          "calls": 477,
+          "model": "deepseek/deepseek-v4-flash",
+          "provider": "DeepInfra"
+        }
+      ],
+      "providers": [
+        "DeepInfra"
+      ],
+      "unknown_attribution_calls": 0,
+      "varied": false
+    },
+    "extractor": {
+      "calls": 241,
+      "models_returned": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "per_call": [
+        {
+          "calls": 241,
+          "model": "deepseek/deepseek-v4-flash",
+          "provider": "DeepInfra"
+        }
+      ],
+      "providers": [
+        "DeepInfra"
+      ],
+      "unknown_attribution_calls": 0,
+      "varied": false
+    },
+    "persona": {
+      "calls": 919,
+      "models_returned": [
+        "deepseek/deepseek-v4-flash"
+      ],
+      "per_call": [
+        {
+          "calls": 919,
+          "model": "deepseek/deepseek-v4-flash",
+          "provider": "DeepInfra"
+        }
+      ],
+      "providers": [
+        "DeepInfra"
+      ],
+      "unknown_attribution_calls": 0,
+      "varied": false
+    }
+  },
+  "models": {
+    "agents": {
+      "guarded": "deepseek/deepseek-v4-flash",
+      "naive": "deepseek/deepseek-v4-flash"
+    },
+    "extractor": "deepseek/deepseek-v4-flash",
+    "extractor_requested": "deepseek/deepseek-v4-flash",
+    "persona": "deepseek/deepseek-v4-flash",
+    "persona_requested": "deepseek/deepseek-v4-flash"
+  },
+  "options": {
+    "budget_usd": 2.0,
+    "grade_crm": true,
+    "ledger_cap_usd": 14.5,
+    "max_attempts": 3,
+    "only": [],
+    "settle_s": 15.0
+  },
+  "projection": null,
+  "run_id": "2026-09-27-bench",
+  "scenario_suite_hash": "sha256:78bfae434212b448c5d5fdbc5bcc508a655d7095f17fdedd2963672c933db333",
+  "scenarios": [
+    "happy-book-berlin",
+    "happy-book-browser-hint",
+    "happy-book-host-zone",
+    "happy-cancel",
+    "happy-reschedule-move-it",
+    "happy-reschedule-push-thursday",
+    "tz-after-dst-change",
+    "tz-cst",
+    "tz-ist",
+    "tz-kathmandu",
+    "tz-sydney-next-friday",
+    "tz-us-eu-dst-gap",
+    "fault-commit-then-timeout",
+    "fault-concurrent-channel",
+    "fault-create-500-persistent",
+    "fault-create-timeout-once",
+    "fault-crm-500-once",
+    "fault-duplicate-delivery",
+    "fault-slot-taken-after-offer",
+    "fault-slots-500-once",
+    "fault-slots-malformed",
+    "fault-slots-not-found",
+    "adv-retract-confirmation",
+    "adv-tell-me-its-booked"
+  ],
+  "schema": "booking-truth/manifest/v1",
+  "spend": {
+    "agent_usd": 0.164274,
+    "extractor_usd": 0.026171,
+    "persona_usd": 0.052211,
+    "total_usd": 0.242656
+  },
+  "status": "complete",
+  "status_detail": null,
+  "suite": "bundled",
+  "temperatures": {
+    "agents": {
+      "guarded": 0.2,
+      "naive": 0.2
+    },
+    "extractor": 0.0,
+    "persona": 0.7
+  }
+}

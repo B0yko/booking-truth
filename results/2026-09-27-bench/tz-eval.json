@@ -1,0 +1,753 @@
+{
+  "dataset": "datasets/tz_phrases.jsonl",
+  "deterministic": {
+    "counts": {
+      "correct": 61,
+      "correctly_flagged": 15,
+      "missed_ambiguity": 5,
+      "over_cautious": 19,
+      "silent_wrong_resolution": 0
+    },
+    "headline": "silent_wrong_resolution",
+    "n": 100,
+    "rates": {
+      "correct": 0.61,
+      "correctly_flagged": 0.15,
+      "missed_ambiguity": 0.05,
+      "over_cautious": 0.19,
+      "silent_wrong_resolution": 0.0
+    }
+  },
+  "equivalence_window": {
+    "horizon_days": 730,
+    "start": "2026-01-01T00:00:00Z"
+  },
+  "eval": "tz",
+  "items": [
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-001",
+      "llm": "correct",
+      "text": "Sungai Petani here"
+    },
+    {
+      "deterministic": "missed_ambiguity",
+      "gold_status": "ambiguous",
+      "id": "tzp-002",
+      "llm": "correctly_flagged",
+      "text": "we're in San Jose"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-004",
+      "llm": "correct",
+      "text": "Skardu time works"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-008",
+      "llm": "missed_ambiguity",
+      "text": "Texas"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-010",
+      "llm": "correct",
+      "text": "I'm located in Kucukcekmece, Turkey"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-011",
+      "llm": "correct",
+      "text": "Centro Habana here"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-012",
+      "llm": "silent_wrong_resolution",
+      "text": "I'm in Kurchatov"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-014",
+      "llm": "correct",
+      "text": "we're on CST at our Chicago office"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-015",
+      "llm": "correct",
+      "text": "UTC+5:45"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-017",
+      "llm": "correct",
+      "text": "I'm located in Gresham, USA"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-019",
+      "llm": "correct",
+      "text": "Tiruchirappalli time works"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-020",
+      "llm": "correct",
+      "text": "we're in Les Coteaux"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-021",
+      "llm": "correct",
+      "text": "my timezone is UTC+4:30"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-025",
+      "llm": "missed_ambiguity",
+      "text": "please send times in Australian Central Time"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-026",
+      "llm": "correct",
+      "text": "Arroyo Naranjo here"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-030",
+      "llm": "correct",
+      "text": "GMT+3 (Moscow)"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-031",
+      "llm": "correct",
+      "text": "London, Ontario"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-033",
+      "llm": "correct",
+      "text": "we're based in Astanajapura, Indonesia"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-034",
+      "llm": "correct",
+      "text": "Frankfurt"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-036",
+      "llm": "correct",
+      "text": "my timezone is MSK"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-037",
+      "llm": "correct",
+      "text": "Sydney, Australia"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-039",
+      "llm": "correct",
+      "text": "my timezone is GMT-10"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-040",
+      "llm": "correct",
+      "text": "Antananarivo here"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-041",
+      "llm": "correct",
+      "text": "calling from Pekalongan"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-043",
+      "llm": "correct",
+      "text": "Nepal"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-044",
+      "llm": "correctly_flagged",
+      "text": "Indiana"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-045",
+      "llm": "correct",
+      "text": "UTC-5"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-046",
+      "llm": "correct",
+      "text": "calling from Abomey-Calavi, Benin"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-047",
+      "llm": "correct",
+      "text": "utc-8, please"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-049",
+      "llm": "correct",
+      "text": "I'm in Ningbo, if that helps"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "unknown",
+      "id": "tzp-051",
+      "llm": "correctly_flagged",
+      "text": "on the moon"
+    },
+    {
+      "deterministic": "missed_ambiguity",
+      "gold_status": "ambiguous",
+      "id": "tzp-053",
+      "llm": "missed_ambiguity",
+      "text": "Victoria"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-054",
+      "llm": "correct",
+      "text": "I'm located in Chirpan, Bulgaria"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-055",
+      "llm": "missed_ambiguity",
+      "text": "we run on Australian Eastern Time"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-056",
+      "llm": "correct",
+      "text": "please send times in WIB"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-057",
+      "llm": "correct",
+      "text": "we're based in Half Way Tree"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-059",
+      "llm": "correct",
+      "text": "our office is in Binh Thanh"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "unknown",
+      "id": "tzp-060",
+      "llm": "correctly_flagged",
+      "text": "just use my local time"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-061",
+      "llm": "correct",
+      "text": "I'm on Brasilia time"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-062",
+      "llm": "correct",
+      "text": "please send times in GMT+04:00"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-066",
+      "llm": "correct",
+      "text": "my timezone is Hawaii time"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-067",
+      "llm": "missed_ambiguity",
+      "text": "please send times in PST"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-068",
+      "llm": "correct",
+      "text": "Kyiv"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "unknown",
+      "id": "tzp-069",
+      "llm": "correctly_flagged",
+      "text": "not sure, somewhere in Europe"
+    },
+    {
+      "deterministic": "missed_ambiguity",
+      "gold_status": "ambiguous",
+      "id": "tzp-070",
+      "llm": "correctly_flagged",
+      "text": "Georgia"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-071",
+      "llm": "correct",
+      "text": "I'm in Chicgo"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-072",
+      "llm": "correct",
+      "text": "please send times in Gulf Standard Time"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-073",
+      "llm": "correctly_flagged",
+      "text": "Hyderabad"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-075",
+      "llm": "correctly_flagged",
+      "text": "we're in Springfield"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-076",
+      "llm": "correct",
+      "text": "I live in Melzo"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-077",
+      "llm": "correct",
+      "text": "Kiev"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-079",
+      "llm": "over_cautious",
+      "text": "PKT works for me"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-081",
+      "llm": "correct",
+      "text": "Kazakhstan"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-082",
+      "llm": "correct",
+      "text": "I live in Malabon"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-084",
+      "llm": "correct",
+      "text": "calling from Zurich"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-087",
+      "llm": "correct",
+      "text": "we're in Ōita"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-088",
+      "llm": "correct",
+      "text": "please send times in Newfoundland time"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-089",
+      "llm": "correct",
+      "text": "please send times in UTC +12"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-093",
+      "llm": "correct",
+      "text": "I'm in Mathura"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-094",
+      "llm": "correct",
+      "text": "Central European Time"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-095",
+      "llm": "over_cautious",
+      "text": "EST"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-096",
+      "llm": "correctly_flagged",
+      "text": "CST"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-097",
+      "llm": "correct",
+      "text": "Perth"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-098",
+      "llm": "correct",
+      "text": "we're in Adelaide"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-099",
+      "llm": "correct",
+      "text": "we're in LA"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-100",
+      "llm": "correctly_flagged",
+      "text": "Russia"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-102",
+      "llm": "over_cautious",
+      "text": "PT, please"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-105",
+      "llm": "correct",
+      "text": "all my calls are in UTC +6:30"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-106",
+      "llm": "correct",
+      "text": "the UK"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-107",
+      "llm": "correct",
+      "text": "my timezone is Eastern time"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-109",
+      "llm": "correct",
+      "text": "NYC"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-111",
+      "llm": "correct",
+      "text": "I'm in Al-Junaynah, Western Darfur"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-114",
+      "llm": "correct",
+      "text": "we're based in Antalya"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-115",
+      "llm": "correct",
+      "text": "CET"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-116",
+      "llm": "correct",
+      "text": "we're based in Lam Tin"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-117",
+      "llm": "correct",
+      "text": "Arizona"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-118",
+      "llm": "correct",
+      "text": "Saskatoon time works"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-120",
+      "llm": "correct",
+      "text": "calling from Artux, Xinjiang"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-122",
+      "llm": "missed_ambiguity",
+      "text": "can we use Atlantic time?"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-123",
+      "llm": "correct",
+      "text": "Sao Paulo"
+    },
+    {
+      "deterministic": "missed_ambiguity",
+      "gold_status": "ambiguous",
+      "id": "tzp-124",
+      "llm": "correctly_flagged",
+      "text": "Birmingham"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-125",
+      "llm": "correct",
+      "text": "Chatham Islands"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-126",
+      "llm": "correct",
+      "text": "our office is in Huai'an"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-127",
+      "llm": "correct",
+      "text": "Tehran"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-131",
+      "llm": "correct",
+      "text": "I'm located in Namp’o, North Korea"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-132",
+      "llm": "over_cautious",
+      "text": "whatever timezone your office is in"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "ambiguous",
+      "id": "tzp-135",
+      "llm": "missed_ambiguity",
+      "text": "Spain"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-136",
+      "llm": "correct",
+      "text": "I live in Soroca, Moldova"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-137",
+      "llm": "correct",
+      "text": "please send times in GMT +11"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-138",
+      "llm": "correct",
+      "text": "Torronto"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-140",
+      "llm": "correct",
+      "text": "please send times in UTC+3:30"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-141",
+      "llm": "correct",
+      "text": "we run on Western European Time"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-142",
+      "llm": "correct",
+      "text": "I live in Cuautla, Mexico"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-143",
+      "llm": "correct",
+      "text": "UTC +9 works for me"
+    },
+    {
+      "deterministic": "correctly_flagged",
+      "gold_status": "unknown",
+      "id": "tzp-144",
+      "llm": "correctly_flagged",
+      "text": "wherever works"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-145",
+      "llm": "over_cautious",
+      "text": "Eastern"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-146",
+      "llm": "correct",
+      "text": "we're in Queensland"
+    },
+    {
+      "deterministic": "missed_ambiguity",
+      "gold_status": "ambiguous",
+      "id": "tzp-148",
+      "llm": "missed_ambiguity",
+      "text": "I split my time between Boston and Chicago"
+    },
+    {
+      "deterministic": "over_cautious",
+      "gold_status": "resolved",
+      "id": "tzp-149",
+      "llm": "correct",
+      "text": "Newfoundland"
+    },
+    {
+      "deterministic": "correct",
+      "gold_status": "resolved",
+      "id": "tzp-150",
+      "llm": "correct",
+      "text": "my timezone is UTC-7"
+    }
+  ],
+  "llm": {
+    "counts": {
+      "correct": 74,
+      "correctly_flagged": 12,
+      "missed_ambiguity": 8,
+      "over_cautious": 5,
+      "silent_wrong_resolution": 1
+    },
+    "headline": "silent_wrong_resolution",
+    "n": 100,
+    "rates": {
+      "correct": 0.74,
+      "correctly_flagged": 0.12,
+      "missed_ambiguity": 0.08,
+      "over_cautious": 0.05,
+      "silent_wrong_resolution": 0.01
+    }
+  },
+  "llm_attempted": 100,
+  "llm_errors": [],
+  "llm_scored": 100,
+  "llm_skipped_reason": null,
+  "model": "deepseek/deepseek-v4-flash",
+  "n_items": 100,
+  "split": "test"
+}

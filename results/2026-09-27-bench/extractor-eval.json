@@ -1,0 +1,531 @@
+{
+  "benchmark_agreement": {
+    "by_mode": {
+      "guarded": {
+        "ci": [
+          0.017926,
+          0.093842
+        ],
+        "n": 120,
+        "rate": 0.041667,
+        "x": 5
+      },
+      "naive": {
+        "ci": [
+          0.058133,
+          0.166683
+        ],
+        "n": 120,
+        "rate": 0.1,
+        "x": 12
+      }
+    },
+    "naive_false_success_disagreements": [],
+    "run_dir": "2026-09-27-bench"
+  },
+  "dataset": "datasets/belief_extraction.jsonl",
+  "eval": "extractor",
+  "items": [
+    {
+      "gold_status": "not_booked",
+      "id": "be-002",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-004",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-006",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-007",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-008",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-009",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-011",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-012",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-013",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-014",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-015",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-016",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-017",
+      "lexicon_status": "unclear",
+      "llm_status": "unclear"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-018",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-020",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-023",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-025",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-027",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-028",
+      "lexicon_status": "booked",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-029",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-030",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-032",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-036",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-037",
+      "lexicon_status": "booked",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-038",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-040",
+      "lexicon_status": "booked",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-043",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-044",
+      "lexicon_status": "booked",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-045",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-046",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-047",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-048",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-049",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-050",
+      "lexicon_status": "unclear",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-051",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-052",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-055",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-056",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-058",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-060",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-062",
+      "lexicon_status": "unclear",
+      "llm_status": "unclear"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-064",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-065",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-068",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-069",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-070",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-071",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-072",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-073",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-075",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-076",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-077",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-079",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-080",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-081",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-082",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-084",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-089",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-090",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-091",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-092",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-093",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-094",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-095",
+      "lexicon_status": "unclear",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-096",
+      "lexicon_status": "unclear",
+      "llm_status": "unclear"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-098",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-100",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-102",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "cancelled",
+      "id": "be-103",
+      "lexicon_status": "cancelled",
+      "llm_status": "cancelled"
+    },
+    {
+      "gold_status": "unclear",
+      "id": "be-104",
+      "lexicon_status": "unclear",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-105",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-108",
+      "lexicon_status": "rescheduled",
+      "llm_status": "rescheduled"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-110",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-112",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-113",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-114",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-115",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "not_booked",
+      "id": "be-118",
+      "lexicon_status": "not_booked",
+      "llm_status": "not_booked"
+    },
+    {
+      "gold_status": "booked",
+      "id": "be-119",
+      "lexicon_status": "booked",
+      "llm_status": "booked"
+    },
+    {
+      "gold_status": "rescheduled",
+      "id": "be-120",
+      "lexicon_status": "booked",
+      "llm_status": "rescheduled"
+    }
+  ],
+  "lexicon": {
+    "n": 80,
+    "status_accuracy": 0.9375,
+    "success_recall": 1.0,
+    "success_recall_n": 44,
+    "time_match_accuracy": 0.9125
+  },
+  "llm": {
+    "n": 80,
+    "status_accuracy": 0.9375,
+    "success_recall": 1.0,
+    "success_recall_n": 44,
+    "time_match_accuracy": 1.0
+  },
+  "llm_attempted": 80,
+  "llm_errors": [],
+  "llm_scored": 80,
+  "llm_skipped_reason": null,
+  "model": "deepseek/deepseek-v4-flash",
+  "n_items": 80,
+  "split": "test"
+}

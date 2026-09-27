@@ -1,0 +1,388 @@
+{
+  "fixtures": [
+    {
+      "calendar": "calcom",
+      "guard": "claim_ledger",
+      "mode": "on",
+      "name": "claim_ledger:on:calcom",
+      "status": "pass",
+      "title": "A success claim after a failed booking is blocked"
+    },
+    {
+      "calendar": "google",
+      "guard": "claim_ledger",
+      "mode": "on",
+      "name": "claim_ledger:on:google",
+      "status": "pass",
+      "title": "A success claim after a failed booking is blocked"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "claim_ledger",
+      "mode": "off",
+      "name": "claim_ledger:off:calcom",
+      "status": "pass",
+      "title": "A success claim after a failed booking is blocked"
+    },
+    {
+      "calendar": "google",
+      "guard": "claim_ledger",
+      "mode": "off",
+      "name": "claim_ledger:off:google",
+      "status": "pass",
+      "title": "A success claim after a failed booking is blocked"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "claim_ledger",
+      "mode": "on",
+      "name": "claim_ledger:on:calcom",
+      "status": "pass",
+      "title": "A write whose read-back fails is reported as unconfirmed and handed off"
+    },
+    {
+      "calendar": "google",
+      "guard": "claim_ledger",
+      "mode": "on",
+      "name": "claim_ledger:on:google",
+      "status": "pass",
+      "title": "A write whose read-back fails is reported as unconfirmed and handed off"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "claim_ledger",
+      "mode": "off",
+      "name": "claim_ledger:off:calcom",
+      "status": "pass",
+      "title": "A write whose read-back fails is reported as unconfirmed and handed off"
+    },
+    {
+      "calendar": "google",
+      "guard": "claim_ledger",
+      "mode": "off",
+      "name": "claim_ledger:off:google",
+      "status": "pass",
+      "title": "A write whose read-back fails is reported as unconfirmed and handed off"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "crm_outbox",
+      "mode": "on",
+      "name": "crm_outbox:on:calcom",
+      "status": "pass",
+      "title": "A transient CRM error is retried from the outbox instead of losing the meeting"
+    },
+    {
+      "calendar": "google",
+      "guard": "crm_outbox",
+      "mode": "on",
+      "name": "crm_outbox:on:google",
+      "status": "pass",
+      "title": "A transient CRM error is retried from the outbox instead of losing the meeting"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "crm_outbox",
+      "mode": "off",
+      "name": "crm_outbox:off:calcom",
+      "status": "pass",
+      "title": "A transient CRM error is retried from the outbox instead of losing the meeting"
+    },
+    {
+      "calendar": "google",
+      "guard": "crm_outbox",
+      "mode": "off",
+      "name": "crm_outbox:off:google",
+      "status": "pass",
+      "title": "A transient CRM error is retried from the outbox instead of losing the meeting"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "dedupe",
+      "mode": "on",
+      "name": "dedupe:on:calcom",
+      "status": "pass",
+      "title": "A duplicated delivery of the confirming pick is answered once, not run twice"
+    },
+    {
+      "calendar": "google",
+      "guard": "dedupe",
+      "mode": "on",
+      "name": "dedupe:on:google",
+      "status": "pass",
+      "title": "A duplicated delivery of the confirming pick is answered once, not run twice"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "dedupe",
+      "mode": "off",
+      "name": "dedupe:off:calcom",
+      "status": "pass",
+      "title": "A duplicated delivery of the confirming pick is answered once, not run twice"
+    },
+    {
+      "calendar": "google",
+      "guard": "dedupe",
+      "mode": "off",
+      "name": "dedupe:off:google",
+      "status": "pass",
+      "title": "A duplicated delivery of the confirming pick is answered once, not run twice"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "fail_closed",
+      "mode": "on",
+      "name": "fail_closed:on:calcom",
+      "status": "pass",
+      "title": "Offers made up while the calendar is unavailable are blocked and handed off"
+    },
+    {
+      "calendar": "google",
+      "guard": "fail_closed",
+      "mode": "on",
+      "name": "fail_closed:on:google",
+      "status": "pass",
+      "title": "Offers made up while the calendar is unavailable are blocked and handed off"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "fail_closed",
+      "mode": "off",
+      "name": "fail_closed:off:calcom",
+      "status": "pass",
+      "title": "Offers made up while the calendar is unavailable are blocked and handed off"
+    },
+    {
+      "calendar": "google",
+      "guard": "fail_closed",
+      "mode": "off",
+      "name": "fail_closed:off:google",
+      "status": "pass",
+      "title": "Offers made up while the calendar is unavailable are blocked and handed off"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "fail_closed",
+      "mode": "on",
+      "name": "fail_closed:on:calcom",
+      "status": "pass",
+      "title": "A malformed availability answer is unavailable, never free time"
+    },
+    {
+      "calendar": "google",
+      "guard": "fail_closed",
+      "mode": "on",
+      "name": "fail_closed:on:google",
+      "status": "pass",
+      "title": "A malformed availability answer is unavailable, never free time"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "fail_closed",
+      "mode": "off",
+      "name": "fail_closed:off:calcom",
+      "status": "pass",
+      "title": "A malformed availability answer is unavailable, never free time"
+    },
+    {
+      "calendar": "google",
+      "guard": "fail_closed",
+      "mode": "off",
+      "name": "fail_closed:off:google",
+      "status": "pass",
+      "title": "A malformed availability answer is unavailable, never free time"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "idempotency",
+      "mode": "on",
+      "name": "idempotency:on:calcom",
+      "status": "pass",
+      "title": "A create that commits and then times out is adopted, not repeated or lost"
+    },
+    {
+      "calendar": "google",
+      "guard": "idempotency",
+      "mode": "on",
+      "name": "idempotency:on:google",
+      "status": "pass",
+      "title": "A create that commits and then times out is adopted, not repeated or lost"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "idempotency",
+      "mode": "off",
+      "name": "idempotency:off:calcom",
+      "status": "pass",
+      "title": "A create that commits and then times out is adopted, not repeated or lost"
+    },
+    {
+      "calendar": "google",
+      "guard": "idempotency",
+      "mode": "off",
+      "name": "idempotency:off:google",
+      "status": "pass",
+      "title": "A create that commits and then times out is adopted, not repeated or lost"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "lead_lock",
+      "mode": "on",
+      "name": "lead_lock:on:calcom",
+      "status": "pass",
+      "title": "A confirming pick on one channel and a booking request on another do not both book"
+    },
+    {
+      "calendar": "google",
+      "guard": "lead_lock",
+      "mode": "on",
+      "name": "lead_lock:on:google",
+      "status": "pass",
+      "title": "A confirming pick on one channel and a booking request on another do not both book"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "lead_lock",
+      "mode": "off",
+      "name": "lead_lock:off:calcom",
+      "status": "pass",
+      "title": "A confirming pick on one channel and a booking request on another do not both book"
+    },
+    {
+      "calendar": "google",
+      "guard": "lead_lock",
+      "mode": "off",
+      "name": "lead_lock:off:google",
+      "status": "pass",
+      "title": "A confirming pick on one channel and a booking request on another do not both book"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "pinned_version",
+      "mode": "on",
+      "name": "pinned_version:on:calcom",
+      "status": "pass",
+      "title": "A floating model id fails configuration validation"
+    },
+    {
+      "calendar": "google",
+      "guard": "pinned_version",
+      "mode": "on",
+      "name": "pinned_version:on:google",
+      "status": "pass",
+      "title": "A floating model id fails configuration validation"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "pinned_version",
+      "mode": "off",
+      "name": "pinned_version:off:calcom",
+      "status": "pass",
+      "title": "A floating model id fails configuration validation"
+    },
+    {
+      "calendar": "google",
+      "guard": "pinned_version",
+      "mode": "off",
+      "name": "pinned_version:off:google",
+      "status": "pass",
+      "title": "A floating model id fails configuration validation"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "rendered_confirmation",
+      "mode": "on",
+      "name": "rendered_confirmation:on:calcom",
+      "status": "pass",
+      "title": "A garbled confirmation time is replaced by the code-rendered line"
+    },
+    {
+      "calendar": "google",
+      "guard": "rendered_confirmation",
+      "mode": "on",
+      "name": "rendered_confirmation:on:google",
+      "status": "pass",
+      "title": "A garbled confirmation time is replaced by the code-rendered line"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "rendered_confirmation",
+      "mode": "off",
+      "name": "rendered_confirmation:off:calcom",
+      "status": "pass",
+      "title": "A garbled confirmation time is replaced by the code-rendered line"
+    },
+    {
+      "calendar": "google",
+      "guard": "rendered_confirmation",
+      "mode": "off",
+      "name": "rendered_confirmation:off:google",
+      "status": "pass",
+      "title": "A garbled confirmation time is replaced by the code-rendered line"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "slot_ids",
+      "mode": "on",
+      "name": "slot_ids:on:calcom",
+      "status": "pass",
+      "title": "A model-computed booking time can only drift off-slot when the model computes it"
+    },
+    {
+      "calendar": "google",
+      "guard": "slot_ids",
+      "mode": "on",
+      "name": "slot_ids:on:google",
+      "status": "pass",
+      "title": "A model-computed booking time can only drift off-slot when the model computes it"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "slot_ids",
+      "mode": "off",
+      "name": "slot_ids:off:calcom",
+      "status": "pass",
+      "title": "A model-computed booking time can only drift off-slot when the model computes it"
+    },
+    {
+      "calendar": "google",
+      "guard": "slot_ids",
+      "mode": "off",
+      "name": "slot_ids:off:google",
+      "status": "pass",
+      "title": "A model-computed booking time can only drift off-slot when the model computes it"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "tz_resolver",
+      "mode": "on",
+      "name": "tz_resolver:on:calcom",
+      "status": "pass",
+      "title": "A city outside the naive map is resolved instead of silently becoming the host zone"
+    },
+    {
+      "calendar": "google",
+      "guard": "tz_resolver",
+      "mode": "on",
+      "name": "tz_resolver:on:google",
+      "status": "pass",
+      "title": "A city outside the naive map is resolved instead of silently becoming the host zone"
+    },
+    {
+      "calendar": "calcom",
+      "guard": "tz_resolver",
+      "mode": "off",
+      "name": "tz_resolver:off:calcom",
+      "status": "pass",
+      "title": "A city outside the naive map is resolved instead of silently becoming the host zone"
+    },
+    {
+      "calendar": "google",
+      "guard": "tz_resolver",
+      "mode": "off",
+      "name": "tz_resolver:off:google",
+      "status": "pass",
+      "title": "A city outside the naive map is resolved instead of silently becoming the host zone"
+    }
+  ]
+}

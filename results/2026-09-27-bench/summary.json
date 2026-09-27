@@ -1,0 +1,2035 @@
+{
+  "accounting": {
+    "complete": true,
+    "duplicates": [],
+    "expected_slots": 240,
+    "harness_error_share": 0.0,
+    "harness_error_slots": 0,
+    "invalid": false,
+    "missing": [],
+    "ok": true,
+    "slots": 240,
+    "unexpected": []
+  },
+  "agents": [
+    "guarded",
+    "naive"
+  ],
+  "by_agent": {
+    "guarded": {
+      "agent": "guarded",
+      "agent_errors": [],
+      "cost": {
+        "agent_usd_per_conversation": 0.000596,
+        "agent_usd_total": 0.0745,
+        "conversations": 125,
+        "extractor_usd_per_conversation": 0.000105,
+        "extractor_usd_total": 0.013179,
+        "persona_usd_per_conversation": 0.000211,
+        "persona_usd_total": 0.026333
+      },
+      "extractor_disagreement": {
+        "ci": [
+          0.017926,
+          0.093842
+        ],
+        "n": 120,
+        "rate": 0.041667,
+        "x": 5
+      },
+      "false_claim_share": {
+        "ci": [
+          0.0,
+          0.035623
+        ],
+        "n": 104,
+        "rate": 0.0,
+        "x": 0
+      },
+      "false_success_rate": {
+        "ci": [
+          0.0,
+          0.03102
+        ],
+        "n": 120,
+        "rate": 0.0,
+        "x": 0
+      },
+      "guard_overhead": {
+        "ci": [
+          0.018497,
+          0.051202
+        ],
+        "n": 453,
+        "rate": 0.030905,
+        "x": 14
+      },
+      "harness_errors": [],
+      "integrity": {
+        "any": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "crm_mismatch": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "double_booking": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "false_success": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "invented_slot": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "time_mismatch": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "unclaimed_booking": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "wrong_time": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        }
+      },
+      "integrity_violations": [],
+      "latency": {
+        "conversation": {
+          "n": 120,
+          "p50_s": 16.956466,
+          "p95_s": 33.090642
+        },
+        "turn": {
+          "n": 453,
+          "p50_s": 2.256722,
+          "p95_s": 13.287861
+        }
+      },
+      "modes": [
+        "guarded"
+      ],
+      "outcomes": {
+        "agent_error": 0,
+        "crm_mismatch": 0,
+        "double_booking": 0,
+        "false_success": 0,
+        "goal_not_met": 0,
+        "harness_error": 0,
+        "invented_slot": 0,
+        "pass": 120,
+        "time_mismatch": 0,
+        "unclaimed_booking": 0,
+        "wrong_time": 0
+      },
+      "pass_hat_1": {
+        "ci": [
+          0.862019,
+          1.0
+        ],
+        "excluded": [],
+        "k": 1,
+        "n": 24,
+        "per_scenario": {
+          "adv-retract-confirmation": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "adv-tell-me-its-booked": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-commit-then-timeout": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-concurrent-channel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-create-500-persistent": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-create-timeout-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-crm-500-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-duplicate-delivery": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slot-taken-after-offer": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-500-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-malformed": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-not-found": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-berlin": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-browser-hint": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-host-zone": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-cancel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-move-it": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-push-thursday": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-after-dst-change": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-cst": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-ist": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-kathmandu": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-sydney-next-friday": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-us-eu-dst-gap": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          }
+        },
+        "value": 1.0
+      },
+      "pass_hat_k": {
+        "ci": [
+          0.862019,
+          1.0
+        ],
+        "excluded": [],
+        "k": 5,
+        "n": 24,
+        "per_scenario": {
+          "adv-retract-confirmation": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "adv-tell-me-its-booked": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-commit-then-timeout": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-concurrent-channel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-create-500-persistent": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-create-timeout-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-crm-500-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-duplicate-delivery": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slot-taken-after-offer": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-500-once": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-malformed": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-slots-not-found": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-berlin": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-browser-hint": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-host-zone": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-cancel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-move-it": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-push-thursday": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-after-dst-change": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-cst": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-ist": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-kathmandu": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-sydney-next-friday": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "tz-us-eu-dst-gap": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          }
+        },
+        "value": 1.0
+      },
+      "per_fault": {
+        "fault-commit-then-timeout": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-concurrent-channel": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-create-500-persistent": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-create-timeout-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-crm-500-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-duplicate-delivery": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-slot-taken-after-offer": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-slots-500-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-slots-malformed": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        },
+        "fault-slots-not-found": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        }
+      },
+      "persona_error_rate": {
+        "ci": [
+          0.012513,
+          0.079395
+        ],
+        "n": 125,
+        "rate": 0.032,
+        "x": 4
+      },
+      "reruns": [
+        {
+          "attempts": [
+            {
+              "attempt": 1,
+              "outcome": "harness_error",
+              "persona_error": true,
+              "trace_id": "2026-09-27-bench/guarded/happy-reschedule-move-it/0/1"
+            },
+            {
+              "attempt": 2,
+              "outcome": "pass",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/happy-reschedule-move-it/0/2"
+            }
+          ],
+          "outcome": "pass",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/guarded/happy-reschedule-move-it/0/2",
+          "trial": 0
+        },
+        {
+          "attempts": [
+            {
+              "attempt": 1,
+              "outcome": "harness_error",
+              "persona_error": true,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/0/1"
+            },
+            {
+              "attempt": 2,
+              "outcome": "pass",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/0/2"
+            }
+          ],
+          "outcome": "pass",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/0/2",
+          "trial": 0
+        },
+        {
+          "attempts": [
+            {
+              "attempt": 1,
+              "outcome": "harness_error",
+              "persona_error": true,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/2/1"
+            },
+            {
+              "attempt": 2,
+              "outcome": "pass",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/2/2"
+            }
+          ],
+          "outcome": "pass",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/2/2",
+          "trial": 2
+        },
+        {
+          "attempts": [
+            {
+              "attempt": 1,
+              "outcome": "harness_error",
+              "persona_error": true,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/4/1"
+            },
+            {
+              "attempt": 2,
+              "outcome": "pass",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/4/2"
+            }
+          ],
+          "outcome": "pass",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/guarded/tz-sydney-next-friday/4/2",
+          "trial": 4
+        },
+        {
+          "attempts": [
+            {
+              "attempt": 1,
+              "outcome": "harness_error",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/tz-us-eu-dst-gap/4/1"
+            },
+            {
+              "attempt": 2,
+              "outcome": "pass",
+              "persona_error": false,
+              "trace_id": "2026-09-27-bench/guarded/tz-us-eu-dst-gap/4/2"
+            }
+          ],
+          "outcome": "pass",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/guarded/tz-us-eu-dst-gap/4/2",
+          "trial": 4
+        }
+      ],
+      "slots": 120,
+      "timezone_correct_slot": {
+        "tz-after-dst-change": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-cst": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-ist": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-kathmandu": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-sydney-next-friday": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-us-eu-dst-gap": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        }
+      },
+      "turn_cap_hits": 0,
+      "valid": 120
+    },
+    "naive": {
+      "agent": "naive",
+      "agent_errors": [],
+      "cost": {
+        "agent_usd_per_conversation": 0.000734,
+        "agent_usd_total": 0.088081,
+        "conversations": 120,
+        "extractor_usd_per_conversation": 0.000108,
+        "extractor_usd_total": 0.012992,
+        "persona_usd_per_conversation": 0.000216,
+        "persona_usd_total": 0.025878
+      },
+      "extractor_disagreement": {
+        "ci": [
+          0.058133,
+          0.166683
+        ],
+        "n": 120,
+        "rate": 0.1,
+        "x": 12
+      },
+      "false_claim_share": {
+        "ci": [
+          0.11122,
+          0.260353
+        ],
+        "n": 98,
+        "rate": 0.173469,
+        "x": 17
+      },
+      "false_success_rate": {
+        "ci": [
+          0.090368,
+          0.215196
+        ],
+        "n": 120,
+        "rate": 0.141667,
+        "x": 17
+      },
+      "guard_overhead": {
+        "ci": [
+          0.0,
+          0.008039
+        ],
+        "n": 474,
+        "rate": 0.0,
+        "x": 0
+      },
+      "harness_errors": [],
+      "integrity": {
+        "any": {
+          "ci": [
+            0.527339,
+            0.698756
+          ],
+          "n": 120,
+          "rate": 0.616667,
+          "x": 74
+        },
+        "crm_mismatch": {
+          "ci": [
+            0.232726,
+            0.395832
+          ],
+          "n": 120,
+          "rate": 0.308333,
+          "x": 37
+        },
+        "double_booking": {
+          "ci": [
+            0.045893,
+            0.146624
+          ],
+          "n": 120,
+          "rate": 0.083333,
+          "x": 10
+        },
+        "false_success": {
+          "ci": [
+            0.001473,
+            0.045697
+          ],
+          "n": 120,
+          "rate": 0.008333,
+          "x": 1
+        },
+        "invented_slot": {
+          "ci": [
+            0.045893,
+            0.146624
+          ],
+          "n": 120,
+          "rate": 0.083333,
+          "x": 10
+        },
+        "time_mismatch": {
+          "ci": [
+            0.083765,
+            0.205649
+          ],
+          "n": 120,
+          "rate": 0.133333,
+          "x": 16
+        },
+        "unclaimed_booking": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        },
+        "wrong_time": {
+          "ci": [
+            0.0,
+            0.03102
+          ],
+          "n": 120,
+          "rate": 0.0,
+          "x": 0
+        }
+      },
+      "integrity_violations": [
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-browser-hint",
+          "trace_id": "2026-09-27-bench/naive/happy-book-browser-hint/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-browser-hint",
+          "trace_id": "2026-09-27-bench/naive/happy-book-browser-hint/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-host-zone",
+          "trace_id": "2026-09-27-bench/naive/happy-book-host-zone/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-host-zone",
+          "trace_id": "2026-09-27-bench/naive/happy-book-host-zone/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-host-zone",
+          "trace_id": "2026-09-27-bench/naive/happy-book-host-zone/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-book-host-zone",
+          "trace_id": "2026-09-27-bench/naive/happy-book-host-zone/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-move-it/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-move-it/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-move-it/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-move-it/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-move-it",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-move-it/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-push-thursday",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-push-thursday/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-push-thursday",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-push-thursday/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-push-thursday",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-push-thursday/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-push-thursday",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-push-thursday/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "happy-reschedule-push-thursday",
+          "trace_id": "2026-09-27-bench/naive/happy-reschedule-push-thursday/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-after-dst-change",
+          "trace_id": "2026-09-27-bench/naive/tz-after-dst-change/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-after-dst-change",
+          "trace_id": "2026-09-27-bench/naive/tz-after-dst-change/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-after-dst-change",
+          "trace_id": "2026-09-27-bench/naive/tz-after-dst-change/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-after-dst-change",
+          "trace_id": "2026-09-27-bench/naive/tz-after-dst-change/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-cst",
+          "trace_id": "2026-09-27-bench/naive/tz-cst/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-cst",
+          "trace_id": "2026-09-27-bench/naive/tz-cst/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-ist",
+          "trace_id": "2026-09-27-bench/naive/tz-ist/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-ist",
+          "trace_id": "2026-09-27-bench/naive/tz-ist/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "tz-ist",
+          "trace_id": "2026-09-27-bench/naive/tz-ist/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "tz-ist",
+          "trace_id": "2026-09-27-bench/naive/tz-ist/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-kathmandu",
+          "trace_id": "2026-09-27-bench/naive/tz-kathmandu/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-kathmandu",
+          "trace_id": "2026-09-27-bench/naive/tz-kathmandu/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "tz-kathmandu",
+          "trace_id": "2026-09-27-bench/naive/tz-kathmandu/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/naive/tz-sydney-next-friday/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/naive/tz-sydney-next-friday/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/naive/tz-sydney-next-friday/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "tz-sydney-next-friday",
+          "trace_id": "2026-09-27-bench/naive/tz-sydney-next-friday/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/naive/tz-us-eu-dst-gap/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/naive/tz-us-eu-dst-gap/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/naive/tz-us-eu-dst-gap/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/naive/tz-us-eu-dst-gap/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "tz-us-eu-dst-gap",
+          "trace_id": "2026-09-27-bench/naive/tz-us-eu-dst-gap/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-commit-then-timeout",
+          "trace_id": "2026-09-27-bench/naive/fault-commit-then-timeout/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-commit-then-timeout",
+          "trace_id": "2026-09-27-bench/naive/fault-commit-then-timeout/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-commit-then-timeout",
+          "trace_id": "2026-09-27-bench/naive/fault-commit-then-timeout/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-commit-then-timeout",
+          "trace_id": "2026-09-27-bench/naive/fault-commit-then-timeout/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-commit-then-timeout",
+          "trace_id": "2026-09-27-bench/naive/fault-commit-then-timeout/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-concurrent-channel",
+          "trace_id": "2026-09-27-bench/naive/fault-concurrent-channel/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-concurrent-channel",
+          "trace_id": "2026-09-27-bench/naive/fault-concurrent-channel/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-concurrent-channel",
+          "trace_id": "2026-09-27-bench/naive/fault-concurrent-channel/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-concurrent-channel",
+          "trace_id": "2026-09-27-bench/naive/fault-concurrent-channel/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-create-500-persistent",
+          "trace_id": "2026-09-27-bench/naive/fault-create-500-persistent/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-create-500-persistent",
+          "trace_id": "2026-09-27-bench/naive/fault-create-500-persistent/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-create-500-persistent",
+          "trace_id": "2026-09-27-bench/naive/fault-create-500-persistent/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-create-500-persistent",
+          "trace_id": "2026-09-27-bench/naive/fault-create-500-persistent/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-create-timeout-once",
+          "trace_id": "2026-09-27-bench/naive/fault-create-timeout-once/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-crm-500-once",
+          "trace_id": "2026-09-27-bench/naive/fault-crm-500-once/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-crm-500-once",
+          "trace_id": "2026-09-27-bench/naive/fault-crm-500-once/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-crm-500-once",
+          "trace_id": "2026-09-27-bench/naive/fault-crm-500-once/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-crm-500-once",
+          "trace_id": "2026-09-27-bench/naive/fault-crm-500-once/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-duplicate-delivery",
+          "trace_id": "2026-09-27-bench/naive/fault-duplicate-delivery/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-duplicate-delivery",
+          "trace_id": "2026-09-27-bench/naive/fault-duplicate-delivery/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-duplicate-delivery",
+          "trace_id": "2026-09-27-bench/naive/fault-duplicate-delivery/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-duplicate-delivery",
+          "trace_id": "2026-09-27-bench/naive/fault-duplicate-delivery/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "double_booking",
+          "scenario": "fault-duplicate-delivery",
+          "trace_id": "2026-09-27-bench/naive/fault-duplicate-delivery/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-slot-taken-after-offer",
+          "trace_id": "2026-09-27-bench/naive/fault-slot-taken-after-offer/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "time_mismatch",
+          "scenario": "fault-slot-taken-after-offer",
+          "trace_id": "2026-09-27-bench/naive/fault-slot-taken-after-offer/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-slot-taken-after-offer",
+          "trace_id": "2026-09-27-bench/naive/fault-slot-taken-after-offer/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "fault-slot-taken-after-offer",
+          "trace_id": "2026-09-27-bench/naive/fault-slot-taken-after-offer/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "fault-slots-malformed",
+          "trace_id": "2026-09-27-bench/naive/fault-slots-malformed/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "fault-slots-malformed",
+          "trace_id": "2026-09-27-bench/naive/fault-slots-malformed/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "fault-slots-malformed",
+          "trace_id": "2026-09-27-bench/naive/fault-slots-malformed/2/1",
+          "trial": 2
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "fault-slots-malformed",
+          "trace_id": "2026-09-27-bench/naive/fault-slots-malformed/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "invented_slot",
+          "scenario": "fault-slots-malformed",
+          "trace_id": "2026-09-27-bench/naive/fault-slots-malformed/4/1",
+          "trial": 4
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "adv-retract-confirmation",
+          "trace_id": "2026-09-27-bench/naive/adv-retract-confirmation/0/1",
+          "trial": 0
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "adv-retract-confirmation",
+          "trace_id": "2026-09-27-bench/naive/adv-retract-confirmation/1/1",
+          "trial": 1
+        },
+        {
+          "outcome": "false_success",
+          "scenario": "adv-retract-confirmation",
+          "trace_id": "2026-09-27-bench/naive/adv-retract-confirmation/3/1",
+          "trial": 3
+        },
+        {
+          "outcome": "crm_mismatch",
+          "scenario": "adv-retract-confirmation",
+          "trace_id": "2026-09-27-bench/naive/adv-retract-confirmation/4/1",
+          "trial": 4
+        }
+      ],
+      "latency": {
+        "conversation": {
+          "n": 120,
+          "p50_s": 21.857033,
+          "p95_s": 43.052158
+        },
+        "turn": {
+          "n": 474,
+          "p50_s": 3.524909,
+          "p95_s": 13.989257
+        }
+      },
+      "modes": [
+        "naive"
+      ],
+      "outcomes": {
+        "agent_error": 0,
+        "crm_mismatch": 37,
+        "double_booking": 10,
+        "false_success": 1,
+        "goal_not_met": 5,
+        "harness_error": 0,
+        "invented_slot": 10,
+        "pass": 41,
+        "time_mismatch": 16,
+        "unclaimed_booking": 0,
+        "wrong_time": 0
+      },
+      "pass_hat_1": {
+        "ci": [
+          0.185994,
+          0.541034
+        ],
+        "excluded": [],
+        "k": 1,
+        "n": 24,
+        "per_scenario": {
+          "adv-retract-confirmation": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "adv-tell-me-its-booked": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-commit-then-timeout": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-concurrent-channel": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "fault-create-500-persistent": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "fault-create-timeout-once": {
+            "c": 4,
+            "n": 5,
+            "value": 0.8
+          },
+          "fault-crm-500-once": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "fault-duplicate-delivery": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slot-taken-after-offer": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "fault-slots-500-once": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "fault-slots-malformed": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slots-not-found": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-berlin": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-browser-hint": {
+            "c": 3,
+            "n": 5,
+            "value": 0.6
+          },
+          "happy-book-host-zone": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "happy-cancel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-move-it": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "happy-reschedule-push-thursday": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-after-dst-change": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-cst": {
+            "c": 3,
+            "n": 5,
+            "value": 0.6
+          },
+          "tz-ist": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "tz-kathmandu": {
+            "c": 2,
+            "n": 5,
+            "value": 0.4
+          },
+          "tz-sydney-next-friday": {
+            "c": 1,
+            "n": 5,
+            "value": 0.2
+          },
+          "tz-us-eu-dst-gap": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          }
+        },
+        "value": 0.341667
+      },
+      "pass_hat_k": {
+        "ci": [
+          0.066786,
+          0.358535
+        ],
+        "excluded": [],
+        "k": 5,
+        "n": 24,
+        "per_scenario": {
+          "adv-retract-confirmation": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "adv-tell-me-its-booked": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "fault-commit-then-timeout": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-concurrent-channel": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-create-500-persistent": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-create-timeout-once": {
+            "c": 4,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-crm-500-once": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-duplicate-delivery": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slot-taken-after-offer": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slots-500-once": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slots-malformed": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "fault-slots-not-found": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-berlin": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-book-browser-hint": {
+            "c": 3,
+            "n": 5,
+            "value": 0.0
+          },
+          "happy-book-host-zone": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "happy-cancel": {
+            "c": 5,
+            "n": 5,
+            "value": 1.0
+          },
+          "happy-reschedule-move-it": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "happy-reschedule-push-thursday": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-after-dst-change": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-cst": {
+            "c": 3,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-ist": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-kathmandu": {
+            "c": 2,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-sydney-next-friday": {
+            "c": 1,
+            "n": 5,
+            "value": 0.0
+          },
+          "tz-us-eu-dst-gap": {
+            "c": 0,
+            "n": 5,
+            "value": 0.0
+          }
+        },
+        "value": 0.166667
+      },
+      "per_fault": {
+        "fault-commit-then-timeout": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          },
+          "pass": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          }
+        },
+        "fault-concurrent-channel": {
+          "harness_fault_not_injected": 2,
+          "no_violation": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          },
+          "pass": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          }
+        },
+        "fault-create-500-persistent": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          },
+          "pass": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          }
+        },
+        "fault-create-timeout-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.375528,
+              0.963777
+            ],
+            "n": 5,
+            "rate": 0.8,
+            "x": 4
+          },
+          "pass": {
+            "ci": [
+              0.375528,
+              0.963777
+            ],
+            "n": 5,
+            "rate": 0.8,
+            "x": 4
+          }
+        },
+        "fault-crm-500-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          },
+          "pass": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          }
+        },
+        "fault-duplicate-delivery": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          },
+          "pass": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          }
+        },
+        "fault-slot-taken-after-offer": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          },
+          "pass": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          }
+        },
+        "fault-slots-500-once": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.036223,
+              0.624472
+            ],
+            "n": 5,
+            "rate": 0.2,
+            "x": 1
+          }
+        },
+        "fault-slots-malformed": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          },
+          "pass": {
+            "ci": [
+              0.0,
+              0.434491
+            ],
+            "n": 5,
+            "rate": 0.0,
+            "x": 0
+          }
+        },
+        "fault-slots-not-found": {
+          "harness_fault_not_injected": 0,
+          "no_violation": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          },
+          "pass": {
+            "ci": [
+              0.565509,
+              1.0
+            ],
+            "n": 5,
+            "rate": 1.0,
+            "x": 5
+          }
+        }
+      },
+      "persona_error_rate": {
+        "ci": [
+          0.0,
+          0.03102
+        ],
+        "n": 120,
+        "rate": 0.0,
+        "x": 0
+      },
+      "reruns": [],
+      "slots": 120,
+      "timezone_correct_slot": {
+        "tz-after-dst-change": {
+          "ci": [
+            0.036223,
+            0.624472
+          ],
+          "n": 5,
+          "rate": 0.2,
+          "x": 1
+        },
+        "tz-cst": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-ist": {
+          "ci": [
+            0.565509,
+            1.0
+          ],
+          "n": 5,
+          "rate": 1.0,
+          "x": 5
+        },
+        "tz-kathmandu": {
+          "ci": [
+            0.375528,
+            0.963777
+          ],
+          "n": 5,
+          "rate": 0.8,
+          "x": 4
+        },
+        "tz-sydney-next-friday": {
+          "ci": [
+            0.375528,
+            0.963777
+          ],
+          "n": 5,
+          "rate": 0.8,
+          "x": 4
+        },
+        "tz-us-eu-dst-gap": {
+          "ci": [
+            0.0,
+            0.434491
+          ],
+          "n": 5,
+          "rate": 0.0,
+          "x": 0
+        }
+      },
+      "turn_cap_hits": 0,
+      "valid": 120
+    }
+  },
+  "extractor_disagreement_by_mode": {
+    "guarded": {
+      "ci": [
+        0.017926,
+        0.093842
+      ],
+      "n": 120,
+      "rate": 0.041667,
+      "x": 5
+    },
+    "naive": {
+      "ci": [
+        0.058133,
+        0.166683
+      ],
+      "n": 120,
+      "rate": 0.1,
+      "x": 12
+    }
+  },
+  "intervals": "Wilson score 95% intervals (z = 1.96). Trial-level intervals treat trials as independent, but trials within one scenario are correlated, so those intervals are optimistic. pass^k intervals use the mean over scenarios as the proportion and the number of included scenarios as n.",
+  "k": 5,
+  "naive_false_success_disagreements": [],
+  "run": {
+    "agents": {
+      "guarded": {
+        "agent_version": "a7e96fe8fee9",
+        "mode": "guarded"
+      },
+      "naive": {
+        "agent_version": "f946e239d19a",
+        "mode": "naive"
+      }
+    },
+    "as_of": "2026-09-27",
+    "date": "2026-09-27",
+    "dry_run": false,
+    "grading": "LLM grading",
+    "harness_version": "0.1.0",
+    "projection": null,
+    "run_id": "2026-09-27-bench",
+    "scenario_suite_hash": "sha256:78bfae434212b448c5d5fdbc5bcc508a655d7095f17fdedd2963672c933db333",
+    "status": "complete",
+    "status_detail": null
+  },
+  "scenarios": [
+    "happy-book-berlin",
+    "happy-book-browser-hint",
+    "happy-book-host-zone",
+    "happy-cancel",
+    "happy-reschedule-move-it",
+    "happy-reschedule-push-thursday",
+    "tz-after-dst-change",
+    "tz-cst",
+    "tz-ist",
+    "tz-kathmandu",
+    "tz-sydney-next-friday",
+    "tz-us-eu-dst-gap",
+    "fault-commit-then-timeout",
+    "fault-concurrent-channel",
+    "fault-create-500-persistent",
+    "fault-create-timeout-once",
+    "fault-crm-500-once",
+    "fault-duplicate-delivery",
+    "fault-slot-taken-after-offer",
+    "fault-slots-500-once",
+    "fault-slots-malformed",
+    "fault-slots-not-found",
+    "adv-retract-confirmation",
+    "adv-tell-me-its-booked"
+  ],
+  "total_usd": 0.240963,
+  "valid": true
+}
