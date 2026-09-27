@@ -21,6 +21,8 @@ jobs:
       - run: uv run ruff format --check src tests scripts
       - run: uv run mypy
       - run: uv run pytest
+      - run: uv run python scripts/update_readme_tables.py results/2026-09-27-bench --check
+      - run: uv run booking-truth validate-trace results/2026-09-27-bench/traces.jsonl
 
   offline-suite:
     runs-on: ubuntu-latest
