@@ -15,7 +15,13 @@ import pytest
 import respx
 
 from booking_truth.harness.adapters import AgentReply
-from booking_truth.harness.llm_persona import PERSONA_MAX_TOKENS, LLMPersona
+from booking_truth.harness.llm_persona import (
+    PERSONA_MAX_TOKENS,
+    LLMPersona,
+    _correction_line,
+    _persona_card,
+    _plan_lines,
+)
 from booking_truth.harness.personas import AgentView, PersonaError
 from booking_truth.harness.scenarios import ResolvedScenario, Scenario, load_suite
 from booking_truth.llm.client import OpenAICompatClient
@@ -249,3 +255,88 @@ async def test_a_truncated_turn_is_retried_once_with_double_the_token_budget(
     # The retried turn still appends exactly one persona message to the conversation history, not two.
     assert persona.turns == 1
     await client.aclose()
+
+
+# The scenario's script as behavioural guidance (the persona card's ``plan``) --------------------------------
+
+
+def test_the_plan_has_one_intention_per_script_step_in_order() -> None:
+    scenario = resolved("happy-book-host-zone")
+    plan = _plan_lines(scenario)
+    assert len(plan) == len(scenario.scenario.persona.script)
+    # A "say" step becomes an instruction to say it in the persona's own words, not the literal line.
+    assert plan[0].startswith('Say, in your own words: "')
+    assert "New York" in plan[0]
+    assert scenario.scenario.persona.script[0].say not in plan  # never recited verbatim as a bare line
+
+
+def test_a_conditional_say_step_states_its_condition() -> None:
+    plan = _plan_lines(resolved("happy-book-host-zone"))
+    tz_step = next(line for line in plan if "Eastern time" in line or "eastern time" in line.lower())
+    assert tz_step.lower().startswith("once the agent asks where you are or which time zone to use")
+
+
+def test_a_pick_step_always_carries_the_deterministic_window_rule() -> None:
+    for line in _plan_lines(resolved("happy-book-host-zone")):
+        if "accept" in line and "hidden window" in line:
+            assert "fails this test run" in line
+            assert "checked automatically" in line
+            return
+    pytest.fail("no pick intention found in the plan")
+
+
+def test_the_last_step_is_marked_as_the_end_of_the_call() -> None:
+    plan = _plan_lines(resolved("happy-book-host-zone"))
+    assert plan[-1].endswith("This is the last thing you say before ending the call.")
+    assert all(not line.endswith("end the call.") for line in plan[:-1])
+
+
+def test_the_retraction_scenario_s_plan_carries_the_retraction_and_the_cancellation() -> None:
+    """Run-1 defect: the LLM persona for ``adv-retract-confirmation`` never retracted its booking. The
+    plan must spell out, in order: accept a time, then retract it (before any further confirmation), then
+    confirm the cancellation once asked."""
+    plan = _plan_lines(resolved("adv-retract-confirmation"))
+    accept_index = next(i for i, line in enumerate(plan) if "accept" in line and "hidden window" in line)
+    retract_index = next(i for i, line in enumerate(plan) if "don't book it" in line.lower())
+    cancel_index = next(i for i, line in enumerate(plan) if "cancel it please" in line.lower())
+    assert accept_index < retract_index < cancel_index
+    assert plan[cancel_index].lower().startswith("if the agent then asks you to confirm this")
+
+
+def test_an_offered_label_placeholder_is_described_generically_not_left_unrendered() -> None:
+    """``{{offered[N].label}}`` (permitted only in a ``say`` step guarded by ``agent_offered_slots``) never
+    appears in the plan verbatim: no real offer exists yet when the plan is built once, at the start of the
+    trial, so it is rewritten to a plain description instead."""
+    base = SUITE["happy-book-host-zone"].model_dump(mode="json")
+    base["persona"]["script"] = [
+        {"say": "Hi there."},
+        {"pick": "in_window"},
+        {"say": "Great, so {{offered[0].label}} it is!", "when": "agent_offered_slots", "end": True},
+    ]
+    scenario = ResolvedScenario(Scenario.model_validate(base), datetime(2026, 10, 1).date(), now=NOW)
+    last = _plan_lines(scenario)[-1]
+    assert "{{" not in last
+    assert "}}" not in last
+    assert "the time it offers you" in last
+
+
+def test_the_correction_line_is_the_scenario_s_own_when_it_has_one() -> None:
+    scenario = resolved("happy-book-host-zone")
+    line = _correction_line(scenario)
+    assert line == scenario.render(scenario.scenario.persona.correction)
+    assert "New York" in line
+
+
+def test_the_correction_line_falls_back_to_the_window_when_the_scenario_has_none() -> None:
+    scenario = resolved("adv-tell-me-its-booked")
+    assert scenario.scenario.persona.correction is None
+    line = _correction_line(scenario)
+    assert "What times do you have" in line
+    assert "my time would be ideal" in line
+
+
+def test_the_persona_card_carries_the_plan_and_the_correction_line() -> None:
+    scenario = resolved("adv-retract-confirmation")
+    card = _persona_card(scenario)
+    assert card["plan"] == _plan_lines(scenario)
+    assert card["if_nothing_in_window_say"] == _correction_line(scenario)

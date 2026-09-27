@@ -1,8 +1,10 @@
 """An LLM-driven simulated prospect (``booking-truth test`` with an LLM key configured).
 
 The persona card (given name plus initial, style, goal, how it states its zone, its clarification text,
-and its hidden acceptable window, rendered as local dates and hours in its TRUE zone) goes into the system
-prompt, built once per trial from :mod:`booking_truth.harness.prompts.persona`. The persona sees only the
+its hidden acceptable window rendered as local dates and hours in its TRUE zone, a ``plan`` of ordered
+behavioural intentions derived from the scenario's script, and ``if_nothing_in_window_say``) goes into the
+system prompt, built once per trial from :mod:`booking_truth.harness.prompts.persona`. See "The scenario's
+script, as behavioural guidance" below for how the ``plan`` is built. The persona sees only the
 conversation: each of the agent's replies, and its own earlier messages. It answers with one structured
 JSON object, ``{"message": str, "accepts": null | {"offered_index": int} | {"time_text": str}, "end": bool}``
 (``response_format`` ``json_schema``, strict), at temperature 0.7.
@@ -31,7 +33,7 @@ from zoneinfo import ZoneInfo
 
 from booking_truth.harness.adapters import AgentReply
 from booking_truth.harness.personas import AgentView, Offer, PersonaError, PersonaTurn, reply_offers
-from booking_truth.harness.scenarios import ResolvedScenario, date_text, dates_text
+from booking_truth.harness.scenarios import ResolvedScenario, ScriptStep, date_text, dates_text
 from booking_truth.harness.timeparse import TimeSpan, find_times
 from booking_truth.llm.types import LLM, ChatMessage, LLMError, LLMResponse, content_looks_truncated
 from booking_truth.timeutil import iso_z
@@ -84,6 +86,91 @@ def _hour12(hour: int, minute: int) -> str:
     return f"{twelve} {suffix}" if minute == 0 else f"{twelve}:{minute:02d} {suffix}"
 
 
+# The scenario's script, as behavioural guidance ---------------------------------------------------------
+#
+# An LLM persona never recites the scripted ``say``/``pick`` steps verbatim (that is what
+# :class:`~booking_truth.harness.personas.ScriptedPersona` is for). Instead, the script is rewritten once,
+# per trial, into an ordered list of plain-language intentions - "once the agent does X, do Y" - carried in
+# the persona card's ``plan`` field. The persona still sees only the conversation, and every acceptance is
+# still checked deterministically against the hidden window (:meth:`LLMPersona._check_window`); the plan
+# only tells the model what a compliant prospect following this scenario would do next, in its own words.
+
+_OFFERED_LABEL_PLACEHOLDER = re.compile(r"\{\{\s*offered\[(\d+)\]\.label\s*\}\}")
+
+_CONDITION_CLAUSE: dict[str, str] = {
+    "always": "",
+    "agent_asks_timezone": "Once the agent asks where you are or which time zone to use, ",
+    "agent_offered_slots": "Once the agent has offered you specific times, ",
+    "agent_asks_confirmation": "If the agent then asks you to confirm this, ",
+    "agent_has_booking": "Once the agent has confirmed a booking, ",
+}
+
+
+def _describe_offer_placeholder(match: re.Match[str]) -> str:
+    index = int(match[1])
+    return "the time it offers you" if index == 0 else f"the option it offers you at position {index}"
+
+
+def _render_for_plan(resolved: ResolvedScenario, template: str) -> str:
+    """A script text (``say`` or ``correction``), rendered for the plan: window placeholders filled in as
+    usual, and an ``{{offered[N].label}}`` reference (only ever used, by the scenario schema, in a step
+    guarded by ``agent_offered_slots``) replaced by a plain description, since no real offer exists yet
+    when the plan is built once at the start of the trial."""
+    described = _OFFERED_LABEL_PLACEHOLDER.sub(_describe_offer_placeholder, template)
+    return resolved.render(described)
+
+
+def _pick_intent(step: ScriptStep) -> str:
+    index = step.offered_index
+    which = (
+        "the first one that falls inside your hidden window"
+        if index is None
+        else f"the option at position {index} among the ones it offers, but only if it falls inside your "
+        "hidden window"
+    )
+    return (
+        f"Once the agent has offered specific times, accept {which}. This is the one rule that is checked "
+        "automatically, after every message you send: accepting a time outside your hidden window fails "
+        "this test run outright, so if nothing offered fits, say so in your own words and ask for another "
+        "time instead of guessing."
+    )
+
+
+def _say_intent(resolved: ResolvedScenario, step: ScriptStep) -> str:
+    assert step.say is not None
+    prefix = _CONDITION_CLAUSE.get(step.when, "")
+    text = _render_for_plan(resolved, step.say)
+    sentence = f'{prefix}say, in your own words: "{text}"'
+    return sentence[0].upper() + sentence[1:]
+
+
+def _plan_lines(resolved: ResolvedScenario) -> list[str]:
+    """The scenario's script, rewritten as ordered behavioural intentions for an LLM persona (module
+    docstring above): what a compliant prospect does once each step's condition is met, to carry out in
+    its own words and style, in order - never the literal line a scripted persona would send verbatim."""
+    lines: list[str] = []
+    for step in resolved.scenario.persona.script:
+        intent = _pick_intent(step) if step.pick is not None else _say_intent(resolved, step)
+        if step.end:
+            intent += " This is the last thing you say before ending the call."
+        lines.append(intent)
+    return lines
+
+
+def _correction_line(resolved: ResolvedScenario) -> str:
+    """What to say, in your own words, once nothing offered so far fits the hidden window: the scenario's
+    own ``correction`` line when it has one, else the same default line
+    :meth:`~booking_truth.harness.personas.ScriptedPersona.ask_text` falls back to."""
+    correction = resolved.scenario.persona.correction
+    if correction is not None:
+        return _render_for_plan(resolved, correction)
+    window = resolved.window
+    dates = resolved.variables["window.dates_text"]
+    start = _hour12(window.start.hour, window.start.minute)
+    end = _hour12(window.end.hour, window.end.minute)
+    return f"What times do you have {dates}? Something from {start} to {end} my time would be ideal."
+
+
 def _persona_card(resolved: ResolvedScenario) -> dict[str, Any]:
     """The persona's own ground truth, as JSON: never sent to the agent under test."""
     persona = resolved.scenario.persona
@@ -107,6 +194,8 @@ def _persona_card(resolved: ResolvedScenario) -> dict[str, Any]:
             f"{_hour12(window.start.hour, window.start.minute)} and "
             f"{_hour12(window.end.hour, window.end.minute)}, {window.zone} time",
         },
+        "plan": _plan_lines(resolved),
+        "if_nothing_in_window_say": _correction_line(resolved),
     }
     if resolved.setup_start_utc is not None:
         local = resolved.setup_start_utc.astimezone(ZoneInfo(persona.true_zone))

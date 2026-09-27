@@ -164,6 +164,25 @@ A date in another year than today gets the year appended (`Monday 15 March 2027`
 uses `{{offered[N].label}}` must have `when: agent_offered_slots`; no other text can use it,
 because the agent may not have offered anything when that text is said.
 
+## How the script guides an LLM persona
+
+With no LLM key, `script` is run literally: `ScriptedPersona` sends each `say` line and `pick`
+verbatim, in order, exactly as written above. With an LLM persona (`booking-truth test` with a key
+configured), the persona still sees only the conversation, and every acceptance is still checked
+against the hidden window in code (`PersonaError` on a miss, regardless of what the model intended) -
+but the model is not handed the script's literal text to recite. Instead, the harness rewrites
+`script` once per trial into an ordered list of behavioural intentions (the persona card's `plan`
+field): each step becomes one line of guidance, "once its condition is met, do this," for example a
+`pick: in_window` step becomes "once the agent offers specific times, accept the first one inside your
+hidden window (never one outside it - that is checked automatically and fails the run)," and a `say`
+step becomes "say, in your own words: '<the line>'," with its `when` restated as the condition. The
+model follows these in order, in its own words and style, rather than being handed a transcript to
+copy. `correction` (or, when a scenario omits it, the same default line the scripted persona falls
+back to) is carried the same way, as `if_nothing_in_window_say`. This keeps the two persona kinds
+behaviourally aligned (an LLM persona pursues the same scripted plan a scripted one recites) without
+ever showing the model text it could paste back verbatim, or the agent a persona that is obviously
+reading from a script.
+
 ## Expect
 
 | Field | Meaning |
