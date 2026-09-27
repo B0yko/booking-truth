@@ -24,7 +24,7 @@ uv run mypy
 uv run pytest
 npm run check
 uv run python scripts/check_widget_size.py
-uv run python scripts/update_readme_tables.py --check
+uv run python scripts/update_readme_tables.py results/2026-09-27-bench --check
 ```
 
 The default test run makes no network calls to paid APIs: the agent uses its scripted offline policy
