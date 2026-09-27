@@ -259,10 +259,11 @@ def guard_note(
     return (
         "[claim check] Your reply was not sent, because it claims something the calendar ledger does not "
         f"show:\n{problems}\n\nVerified calendar ledger for this prospect:\n{ledger}\n\n{above}"
-        'Write the reply again as the same JSON object {"reply": "...", "claims": [...]}. Say that a call '
-        "is booked, moved or cancelled only when the ledger shows it, with the ledger's time and zone; offer "
-        "only times from the latest find_slots result. Otherwise say plainly what happened and offer the "
-        f"next step.\n\nRejected reply:\n{draft}"
+        "Answer directly with the corrected JSON object now; do not call a tool. Everything you need is "
+        'already above.\n\nWrite the reply again as the same JSON object {"reply": "...", "claims": [...]}. '
+        "Say that a call is booked, moved or cancelled only when the ledger shows it, with the ledger's time "
+        "and zone; offer only times from the latest find_slots result. Otherwise say plainly what happened "
+        f"and offer the next step.\n\nRejected reply:\n{draft}"
     )
 
 

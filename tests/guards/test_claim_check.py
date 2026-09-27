@@ -191,3 +191,12 @@ def test_an_empty_ledger_is_named_in_the_note() -> None:
     result = check("You're booked!")
     assert "nothing has been booked, moved or cancelled" in guard_note(result, [], zone=BERLIN, draft="x")
     assert ledger_lines([LedgerFact("booked", "uid", TUE, current=False)], BERLIN) == []
+
+
+def test_the_note_tells_the_model_to_answer_directly_and_not_call_a_tool() -> None:
+    """The repair call still offers the tools (`test_a_repair_that_fixes_the_reply_is_sent`), but the
+    ledger above already has everything the model needs to correct its reply; a model that instead calls a
+    tool here gets no second chance (`agent/core.py::_repair`), so the note must say not to."""
+    result = check("You're booked!")
+    note = guard_note(result, [BOOKED], zone=BERLIN, draft="You're booked!")
+    assert "do not call a tool" in note.lower()
