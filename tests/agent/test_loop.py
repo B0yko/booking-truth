@@ -47,6 +47,20 @@ def test_anything_else_is_a_plain_reply_without_claims() -> None:
         assert answer.reply == (content or "").strip()
 
 
+def test_a_json_object_wrapped_in_prose_is_still_read_structured() -> None:
+    """A model that adds a preamble or a sign-off around the object (instead of nothing else, as the base
+    prompt asks) must not have that surrounding prose shown to the prospect as raw JSON: the embedded object
+    is still found and read as the structured answer."""
+    before = parse_final_answer('Sure! Here you go: {"reply": "You are booked.", "claims": []}')
+    assert (before.reply, before.structured, before.claims) == ("You are booked.", True, ())
+    after = parse_final_answer('{"reply": "All set for Tuesday.", "claims": []} Let me know if not!')
+    assert (after.reply, after.structured) == ("All set for Tuesday.", True)
+    nested = parse_final_answer(
+        'Sure! {"reply": "Our hours are {9-5}, does that work?", "claims": []} Talk soon!'
+    )
+    assert (nested.reply, nested.structured) == ("Our hours are {9-5}, does that work?", True)
+
+
 class Looping:
     """A model that always calls a tool, to hit the call cap."""
 

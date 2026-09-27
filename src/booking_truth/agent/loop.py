@@ -1,9 +1,11 @@
 """The LLM tool loop: at most 8 model calls per turn, then a final answer.
 
 The final answer is the assistant's content, which the base prompt asks to be a JSON object
-``{"reply": str, "claims": [{"type": "booked|rescheduled|cancelled|offered", "time": str}]}``. It is parsed
-leniently: code fences are stripped, and content that is not such an object is the whole reply with no
-declared claims.
+``{"reply": str, "claims": [{"type": "booked" | "rescheduled" | "cancelled" | "offered", "time": str}]}``. It
+is parsed leniently: code fences are stripped; a model that adds a preamble or a sign-off around the object,
+instead of nothing else as the prompt asks, still gets that object read out of the surrounding prose, so the
+prose is never shown to the prospect as raw JSON. Content with no such object anywhere is the whole reply
+with no declared claims.
 """
 
 from __future__ import annotations
@@ -41,15 +43,57 @@ class FinalAnswer:
     structured: bool = False
 
 
+def _loads(candidate: str) -> Any:
+    try:
+        return json.loads(candidate)
+    except (json.JSONDecodeError, ValueError):
+        return None
+
+
+def _embedded_json_object(text: str) -> str | None:
+    """The first balanced ``{...}`` in ``text``, ignoring braces inside JSON string values, or ``None``.
+
+    A fallback for a model that wraps its final answer in a preamble or a sign-off ("Sure! {...}", "{...}
+    Let me know!") instead of answering with nothing else, as the base prompt asks: the object is still
+    findable even though the whole content is not itself valid JSON.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        char = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
 def parse_final_answer(content: str | None) -> FinalAnswer:
     """``{"reply": ..., "claims": [...]}`` from the model's content; anything else is a plain reply."""
     text = (content or "").strip()
     fenced = _FENCE.match(text)
     candidate = fenced.group(1) if fenced else text
-    try:
-        data = json.loads(candidate)
-    except (json.JSONDecodeError, ValueError):
-        return FinalAnswer(reply=text)
+    data = _loads(candidate)
+    if data is None and fenced is None:
+        embedded = _embedded_json_object(candidate)
+        if embedded is not None:
+            data = _loads(embedded)
     if not isinstance(data, dict) or not isinstance(data.get("reply"), str):
         return FinalAnswer(reply=text)
     claims: list[DeclaredClaim] = []
