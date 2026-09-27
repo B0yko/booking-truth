@@ -1,0 +1,53 @@
+name: live-bench
+
+# Manually triggered benchmark with live LLM calls. It needs a repository secret named OPENROUTER_API_KEY
+# (Settings -> Secrets and variables -> Actions). Every call is priced and capped by the cost ledger.
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: "Scenario id or tag to run (empty = the whole suite)"
+        required: false
+        default: "smoke"
+      k:
+        description: "Trials per scenario"
+        required: false
+        default: "1"
+      budget_usd:
+        description: "Stop before the run would spend more than this (USD)"
+        required: false
+        default: "0.50"
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - name: Run the benchmark (guarded vs naive, in-process sandbox)
+        env:
+          BT_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          BT_LLM_MODEL: deepseek/deepseek-v4-flash
+          BT_LLM_PROVIDER: deepinfra/fp8
+          BT_BUDGET_USD: ${{ inputs.budget_usd }}
+          BT_LEDGER_DIR: ${{ runner.temp }}/ledger
+        run: |
+          if [ -z "$BT_LLM_API_KEY" ]; then echo "the OPENROUTER_API_KEY secret is not set" >&2; exit 1; fi
+          ONLY_ARGS=()
+          if [ -n "${{ inputs.only }}" ]; then ONLY_ARGS=(--only "${{ inputs.only }}"); fi
+          uv run booking-truth test --agent builtin --agent builtin:naive --sandbox auto \
+            "${ONLY_ARGS[@]}" --k "${{ inputs.k }}" --grade-crm \
+            --budget-usd "${{ inputs.budget_usd }}" --hardware "GitHub Actions ubuntu-latest" \
+            --out runs/live-bench
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: live-bench-run
+          path: runs/live-bench

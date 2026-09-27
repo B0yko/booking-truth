@@ -337,7 +337,8 @@ Naive `false_success` trials where the extractors disagree: none.
 `booking-truth report results/<run-id>` regenerates `summary.json` and `report.md` byte for byte from the stored
 traces, with no network. A fresh benchmark (`scripts/bench.sh`, which brings up `docker-compose.bench.yml` and runs
 `booking-truth test --pool ... --k 5 --grade-crm`) is expected to vary within the intervals: the model is sampled
-at temperature 0.2 and the personas at 0.7.
+at temperature 0.2 and the personas at 0.7. The manually triggered `live-bench` GitHub workflow runs the same comparison in Actions; it
+expects a repository secret named `OPENROUTER_API_KEY`.
 
 ## Configuration
 
