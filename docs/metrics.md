@@ -63,14 +63,18 @@ time of an existing booking under discussion and times the prospect proposed are
 
 ## Harness-side faults
 
-Two faults are injected by the harness, not the sandbox, on the persona's confirming message, which is its first
-pick of an offered slot (a `select_slot` action for the bundled protocol, or the slot's label as text):
+Two faults are injected by the harness, not the sandbox, on one of the persona's picks of an offered slot (a
+`select_slot` action for the bundled protocol, or the slot's label as text):
 
 - `duplicate_delivery` sends the same request again, with the same `message_id`, 50 to 200 ms after the first, while
-  the first is still in flight. Both replies are recorded; the persona continues from the one that arrived last.
+  the first is still in flight. Both replies are recorded; the persona continues from the one that arrived last. It
+  fires on the persona's first pick, unconditionally.
 - `concurrent_channel` sends, at the same moment, a scripted message for the same lead on a new `session_id` with
   `channel=webhook`, asking for the second offered slot. A pass means exactly one active booking that matches the
-  belief taken from both sessions.
+  belief taken from both sessions. Asking for the second offered slot needs at least two slots to have been offered
+  by the pick it fires on, so it fires on the first pick that already knows that many, deferring past an earlier one
+  that does not; if no pick in the whole conversation ever does, it is skipped rather than injected. The trial's
+  record says whether a configured harness fault actually fired (`harness_fault_injected`).
 
 ## Outcome of a trial
 
