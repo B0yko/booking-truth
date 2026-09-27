@@ -13,7 +13,11 @@
 #                       On a Linux Docker host it must be writable by the container user (uid 10001).
 #   BT_BUDGET_USD       required for live runs: the global spend cap checked by the harness and every agent.
 #   OPENROUTER_API_KEY  exported to this script's children as BT_LLM_API_KEY; never written to a file.
-#   BT_LLM_MODEL, BT_LLM_PROVIDER, BT_LLM_BASE_URL   optional, passed to the agents and the harness.
+#   BT_LLM_MODEL, BT_LLM_PROVIDER   the pinned benchmark model and its upstream provider ("Models" in the
+#                       spec); default to deepseek/deepseek-v4-flash and deepinfra/fp8, overridable from the
+#                       environment. Passed, with BT_PERSONA_MODEL, BT_EXTRACTOR_MODEL and BT_LLM_BASE_URL,
+#                       to both the agents (docker-compose.bench.yml) and the harness (this script's own
+#                       `booking-truth test` below).
 #   BT_HARDWARE         the hardware text for the manifest (default: "MacBook Air M5, 24 GB").
 #   BT_BENCH_KEEP=1     leave the pool running afterwards (for `docker stats`).
 #   DOCKER, UV          the docker and uv executables (default: from PATH, then ~/.local/bin).
@@ -35,6 +39,15 @@ tool() {
 DOCKER="$(tool docker "${DOCKER:-}")"
 UV="$(tool uv "${UV:-}")"
 COMPOSE=("$DOCKER" compose -f docker-compose.bench.yml)
+
+# Pin the benchmark model and its upstream provider (still overridable from the environment), and pass
+# BT_PERSONA_MODEL/BT_EXTRACTOR_MODEL through unchanged: exporting all four here, before anything else runs,
+# is what gets them to both the agents (compose interpolates them below) and the harness (this process's own
+# `booking-truth test` at the end, which reads them like any other BT_* setting).
+export BT_LLM_MODEL="${BT_LLM_MODEL:-deepseek/deepseek-v4-flash}"
+export BT_LLM_PROVIDER="${BT_LLM_PROVIDER:-deepinfra/fp8}"
+export BT_PERSONA_MODEL="${BT_PERSONA_MODEL:-}"
+export BT_EXTRACTOR_MODEL="${BT_EXTRACTOR_MODEL:-}"
 
 offline=0
 args=()

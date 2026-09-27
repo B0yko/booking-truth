@@ -44,6 +44,14 @@ def test_work_hours_and_days() -> None:
         parse_work_hours("17:00-09:00")
 
 
+def test_default_llm_model_is_the_pinned_benchmark_model() -> None:
+    # The model chosen by the pilot (docs/adr, "Models"): not a floating alias, so it also passes
+    # validate_for_agent with the pinned_version guard on, with no override needed.
+    settings = make(calcom_base_url="http://sandbox:8100")
+    assert settings.llm_model == "deepseek/deepseek-v4-flash"
+    settings.validate_for_agent()
+
+
 def test_floating_model_rejected_only_with_pinned_version(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     local = {"calcom_base_url": "http://sandbox:8100"}

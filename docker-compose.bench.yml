@@ -47,6 +47,8 @@ x-agent-env: &agent-env
   BT_LLM_BASE_URL: ${BT_LLM_BASE_URL:-}
   BT_LLM_MODEL: ${BT_LLM_MODEL:-}
   BT_LLM_PROVIDER: ${BT_LLM_PROVIDER:-}
+  BT_PERSONA_MODEL: ${BT_PERSONA_MODEL:-}
+  BT_EXTRACTOR_MODEL: ${BT_EXTRACTOR_MODEL:-}
 
 x-agent: &agent
   <<: *image

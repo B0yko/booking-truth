@@ -129,7 +129,7 @@ class Settings(BaseSettings):
     # LLM
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: SecretStr | None = None
-    llm_model: str = "qwen/qwen3-235b-a22b-2507"
+    llm_model: str = "deepseek/deepseek-v4-flash"
     persona_model: str | None = None
     extractor_model: str | None = None
     llm_provider: str | None = None

@@ -186,6 +186,18 @@ def test_each_bench_agent_has_its_own_sandbox_and_the_key_only_from_the_script()
         assert set(sandbox["environment"]) == {"BT_SANDBOX_TOKEN"}
 
 
+def test_bench_agents_pass_through_the_model_and_provider_settings() -> None:
+    """scripts/bench.sh pins BT_LLM_MODEL/BT_LLM_PROVIDER and passes BT_PERSONA_MODEL/BT_EXTRACTOR_MODEL
+    through its own environment; docker-compose.bench.yml must forward all four to every agent."""
+    agents, _sandboxes = bench_services()
+    for agent in agents.values():
+        env = agent["environment"]
+        assert env["BT_LLM_MODEL"] == "${BT_LLM_MODEL:-}"
+        assert env["BT_LLM_PROVIDER"] == "${BT_LLM_PROVIDER:-}"
+        assert env["BT_PERSONA_MODEL"] == "${BT_PERSONA_MODEL:-}"
+        assert env["BT_EXTRACTOR_MODEL"] == "${BT_EXTRACTOR_MODEL:-}"
+
+
 def test_bench_pool_file_matches_the_compose_ports() -> None:
     agents, sandboxes = bench_services()
     by_port = {port(a["ports"][0]): a for a in agents.values()}
@@ -205,6 +217,18 @@ def test_bench_pool_file_matches_the_compose_ports() -> None:
             assert pair.agent.endswith("/v1/chat")
             seen.append(port(pair.agent))
     assert sorted(seen) == sorted(by_port)
+
+
+def test_bench_script_defaults_the_pinned_model_and_provider() -> None:
+    script = (ROOT / "scripts" / "bench.sh").read_text(encoding="utf-8")
+    assert 'export BT_LLM_MODEL="${BT_LLM_MODEL:-deepseek/deepseek-v4-flash}"' in script
+    assert 'export BT_LLM_PROVIDER="${BT_LLM_PROVIDER:-deepinfra/fp8}"' in script
+    # Still overridable from the environment (the default is only the fallback of a parameter expansion),
+    # and BT_PERSONA_MODEL/BT_EXTRACTOR_MODEL reach the harness (this script's own children) the same way.
+    assert 'export BT_PERSONA_MODEL="${BT_PERSONA_MODEL:-}"' in script
+    assert 'export BT_EXTRACTOR_MODEL="${BT_EXTRACTOR_MODEL:-}"' in script
+    table = yaml.safe_load((ROOT / "pricing.yaml").read_text(encoding="utf-8"))
+    assert "deepinfra/fp8" in table["models"]["deepseek/deepseek-v4-flash"]["providers"]
 
 
 def test_bench_script_never_writes_the_key() -> None:
