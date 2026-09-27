@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -84,6 +85,28 @@ async def check_config(settings: Settings) -> Check:
     )
 
 
+def _remaining_budget(data: Mapping[str, Any]) -> str:
+    """Read ``GET /api/v1/key``'s own ``limit_remaining``, never ``limit - usage``.
+
+    ``usage`` is lifetime spend against the key, which can exceed a rolling or promotional ``limit``
+    while real headroom remains: OpenRouter reports that headroom directly as ``limit_remaining``, and
+    that is the only number an operator should be told to stop on. ``limit`` of ``null`` means the key
+    carries no spend limit at all (``limit_remaining`` is then ``null`` too, per the API's own schema).
+    """
+    limit, limit_remaining = data.get("limit"), data.get("limit_remaining")
+    if isinstance(limit_remaining, int | float):
+        remaining = f"${limit_remaining:.2f} remaining"
+        if isinstance(limit, int | float):
+            remaining += f" of ${limit:.2f}"
+        usage_monthly = data.get("usage_monthly")
+        if isinstance(usage_monthly, int | float):
+            remaining += f" (${usage_monthly:.2f} used this month)"
+        return remaining
+    if limit is None:
+        return "no spend limit"
+    return "remaining unknown"
+
+
 async def check_llm(settings: Settings) -> Check:
     if settings.offline or settings.llm_api_key is None:
         return Check("llm", False, "no LLM key configured (BT_LLM_API_KEY, or OPENROUTER_API_KEY)")
@@ -108,8 +131,7 @@ async def check_llm(settings: Settings) -> Check:
             data = key_check.json().get("data") or {}
         except ValueError:
             return Check("llm", False, f"GET {_host(base)}/key returned a non-JSON body")
-        limit, usage = data.get("limit"), data.get("usage") or 0
-        remaining = f"${limit - usage:.2f} remaining" if isinstance(limit, int | float) else "no spend limit"
+        remaining = _remaining_budget(data)
         return Check("llm", True, f"{detail}; key valid, {remaining}")
 
 

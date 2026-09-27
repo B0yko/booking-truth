@@ -98,8 +98,45 @@ async def test_llm_check_reads_the_openrouter_key_endpoint(router: respx.MockRou
     checks = await run_doctor(settings)
     llm = next(c for c in checks if c.name == "llm")
     assert llm.ok is True
-    assert "43.40" in llm.detail
     assert "sk-or-v1-test" not in llm.detail
+
+
+async def test_llm_check_reports_the_key_endpoint_s_own_limit_remaining(router: respx.MockRouter) -> None:
+    # A key can carry lifetime usage past its rolling/promotional limit and still have real headroom:
+    # OpenRouter's own `limit_remaining` is authoritative, never `limit - usage` (which would go negative
+    # here even though the key has $46.35 left).
+    router.get("https://openrouter.ai/api/v1/models").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    router.get("https://openrouter.ai/api/v1/key").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": {"limit": 90.0, "usage": 529.87, "limit_remaining": 46.35, "usage_monthly": 25.5}},
+        )
+    )
+    settings = make(llm_api_key="sk-or-v1-test", calcom_base_url="http://sandbox:8100")
+    checks = await run_doctor(settings)
+    llm = next(c for c in checks if c.name == "llm")
+    assert llm.ok is True
+    assert "46.35" in llm.detail
+    assert "-439.87" not in llm.detail
+    assert "-483.52" not in llm.detail
+
+
+async def test_llm_check_reports_no_spend_limit_when_the_key_has_none(router: respx.MockRouter) -> None:
+    router.get("https://openrouter.ai/api/v1/models").mock(
+        return_value=httpx.Response(200, json={"data": []})
+    )
+    router.get("https://openrouter.ai/api/v1/key").mock(
+        return_value=httpx.Response(
+            200, json={"data": {"limit": None, "usage": 12.0, "limit_remaining": None}}
+        )
+    )
+    settings = make(llm_api_key="sk-or-v1-test", calcom_base_url="http://sandbox:8100")
+    checks = await run_doctor(settings)
+    llm = next(c for c in checks if c.name == "llm")
+    assert llm.ok is True
+    assert "no spend limit" in llm.detail
 
 
 async def test_llm_check_fails_on_an_invalid_key(router: respx.MockRouter) -> None:
