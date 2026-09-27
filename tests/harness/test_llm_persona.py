@@ -18,11 +18,12 @@ from booking_truth.harness.adapters import AgentReply
 from booking_truth.harness.llm_persona import (
     PERSONA_MAX_TOKENS,
     LLMPersona,
+    _annotate,
     _correction_line,
     _persona_card,
     _plan_lines,
 )
-from booking_truth.harness.personas import AgentView, PersonaError
+from booking_truth.harness.personas import AgentView, Offer, PersonaError
 from booking_truth.harness.scenarios import ResolvedScenario, Scenario, load_suite
 from booking_truth.llm.client import OpenAICompatClient
 from booking_truth.llm.ledger import CostLedger
@@ -255,6 +256,39 @@ async def test_a_truncated_turn_is_retried_once_with_double_the_token_budget(
     # The retried turn still appends exactly one persona message to the conversation history, not two.
     assert persona.turns == 1
     await client.aclose()
+
+
+# Offer annotation in the persona's true zone (run-2 anomaly: tz-sydney-next-friday) ------------------------
+
+
+def test_annotate_shows_each_offers_local_time_in_the_persona_true_zone() -> None:
+    """The annotation the persona reads adds each offer's own weekday/date/time in ``prospect_zone``,
+    alongside the label the agent actually sent (which may be worded in a different zone)."""
+    offer = Offer(IN_WINDOW, "Mon 5 Oct, 2:00 PM")  # IN_WINDOW is 2 PM New York; label already host-zone
+    text = _annotate("Which works?", [offer], prospect_zone="Europe/Berlin")
+    assert "Mon 5 Oct, 2:00 PM" in text  # the agent's own wording is kept
+    assert "8:00 PM" in text  # 2 PM New York (EDT, UTC-4) is 8 PM Berlin (CEST, UTC+2)
+
+
+def test_annotate_regression_run2_sydney_pattern() -> None:
+    """Run-2 anomaly 2: the agent's offers were labelled only in the host zone (New York); the LLM persona,
+    given a hidden window stated in its own true zone (Sydney), had to convert unaided and repeatedly
+    picked a New-York-morning slot that was actually the middle of the Sydney night. The annotation must
+    give the persona the converted reading itself, not leave it to reason out."""
+    # A New York morning that is squarely outside a Friday 05:00-09:00 Sydney window (it lands at 03:30
+    # the next day, Sydney time) - one of run 2's actual wrong picks (trace ids ending /3/2 and /3/3).
+    out_of_window = datetime(2026, 10, 1, 17, 30, tzinfo=UTC)  # Thu 1 Oct, 1:30 PM New York
+    # Friday 06:00 Sydney (AEST, UTC+10) - inside the 05:00-09:00 window.
+    in_window = datetime(2026, 10, 1, 20, 0, tzinfo=UTC)
+    offers = [
+        Offer(out_of_window, "Thu 1 Oct, 1:30 PM (America/New_York)"),
+        Offer(in_window, "Thu 1 Oct, 4:00 PM (America/New_York)"),
+    ]
+    text = _annotate("Here's what I have:", offers, prospect_zone="Australia/Sydney")
+    # Both offers are labelled in New York time alone; the annotation must add each one's Sydney reading.
+    assert "3:30 AM" in text  # out_of_window, converted: Fri 2 Oct, 3:30 AM Sydney - outside the window
+    assert "6:00 AM" in text  # in_window, converted: Fri 2 Oct, 6:00 AM Sydney - inside the window
+    assert "Friday 2 October" in text
 
 
 # The scenario's script as behavioural guidance (the persona card's ``plan``) --------------------------------

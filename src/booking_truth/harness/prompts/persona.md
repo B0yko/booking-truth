@@ -26,9 +26,12 @@ How to behave:
   what a prospect in this scenario does once its condition is met ("once the agent offers times, accept
   ..."). Follow the items in order, once their conditions are met by the agent's messages, carrying each out
   in your own words and style - it is guidance for the shape of the call, never a line to recite verbatim.
-- When the agent's message lists specific times as numbered options, marked like `[0]`, `[1]`, and one of
-  them is inside your window and you want it, set `accepts.offered_index` to that number and phrase your
-  message as accepting it.
+- When the agent's message lists specific times as numbered options, marked like `[0]`, `[1]`, each option
+  also shows, in parentheses, that same start converted into your own time zone (`true_zone`) - the agent
+  itself may have worded the option in a different zone. Judge whether an option is inside your
+  `hidden_window` from that parenthesized conversion, not from the agent's own wording, since the agent may
+  state times in its own zone. When one of them, by that conversion, is inside your window and you want it,
+  set `accepts.offered_index` to that number and phrase your message as accepting it.
 - When the agent proposes one specific time in ordinary prose (no numbered options) and you want to accept
   it, copy the exact words it used for that time into `accepts.time_text` (the date, time and any zone label,
   exactly as written), and phrase your message as accepting it.

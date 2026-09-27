@@ -32,7 +32,14 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from booking_truth.harness.adapters import AgentReply
-from booking_truth.harness.personas import AgentView, Offer, PersonaError, PersonaTurn, reply_offers
+from booking_truth.harness.personas import (
+    AgentView,
+    Offer,
+    PersonaError,
+    PersonaTurn,
+    reply_offers,
+    slot_label,
+)
 from booking_truth.harness.scenarios import ResolvedScenario, ScriptStep, date_text, dates_text
 from booking_truth.harness.timeparse import TimeSpan, find_times
 from booking_truth.llm.types import LLM, ChatMessage, LLMError, LLMResponse, content_looks_truncated
@@ -213,12 +220,24 @@ def _system_prompt(resolved: ResolvedScenario) -> str:
     return f"{base}\n\n<persona>\n{block}\n</persona>\n"
 
 
-def _annotate(text: str, offers: Sequence[Offer]) -> str:
+def _annotate(text: str, offers: Sequence[Offer], *, prospect_zone: str) -> str:
     """The agent's text, with its offers enumerated, so ``accepts.offered_index`` has something to refer to
-    (the same slots a real prospect would see as labelled quick-reply buttons)."""
+    (the same slots a real prospect would see as labelled quick-reply buttons).
+
+    Each option also carries its own start, converted to ``prospect_zone`` (the persona's true zone) by
+    the harness itself from the offer's UTC instant - never left to the model to work out. A real prospect
+    reads times in their own frame; the agent under test is still graded on what it actually offered and
+    booked, so this conversion goes only into the persona's prompt, never back to the agent (run-2 anomaly:
+    ``tz-sydney-next-friday``, where an unaided LLM persona had to convert New-York-labelled offers into a
+    Sydney hidden window and repeatedly got the arithmetic wrong)."""
     if not offers:
         return text
-    listed = "\n".join(f"[{index}] {offer.label}" for index, offer in enumerate(offers))
+    lines = [
+        f"[{index}] {offer.label} (in your own time zone: "
+        f"{slot_label(offer.start_utc, prospect_zone, prospect_zone)})"
+        for index, offer in enumerate(offers)
+    ]
+    listed = "\n".join(lines)
     return f"{text}\n\nOptions in this message:\n{listed}"
 
 
@@ -307,7 +326,11 @@ class LLMPersona:
                 host_zone=self.host_zone,
                 reference=view.now,
             )
-            self._history.append(ChatMessage.user(_annotate(view.last_reply.reply or "", offers)))
+            self._history.append(
+                ChatMessage.user(
+                    _annotate(view.last_reply.reply or "", offers, prospect_zone=self.prospect_zone)
+                )
+            )
         else:
             self._history.append(ChatMessage.user(_OPENING_CUE))
         messages = [ChatMessage.system(self._system), *self._history]

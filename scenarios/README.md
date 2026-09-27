@@ -183,6 +183,21 @@ behaviourally aligned (an LLM persona pursues the same scripted plan a scripted 
 ever showing the model text it could paste back verbatim, or the agent a persona that is obviously
 reading from a script.
 
+### Offer annotation
+
+When the agent's reply enumerates specific times, the LLM persona's own prompt annotates each one with
+its start converted into the persona's true zone (weekday, date, local time), computed by the harness
+itself from the offer's UTC instant (the quick replies' `start_utc`, or the harness's own reading of the
+agent's stated time). A real prospect reads times in their own frame, not the agent's; the agent under
+test is still graded on what it actually offered and booked, from the harness's own record of the
+sandbox and the request log, never from anything the persona's prompt adds. The annotation goes only into
+the persona's prompt - it is never sent to the agent - and the persona is told to accept only an option
+whose annotated local time falls inside its hidden window. Without this, an LLM persona has to convert
+the agent's zone into its own unaided, and gets it wrong more often the larger the gap: the regression
+case is `tz-sydney-next-friday`, where offers labelled in New York time and a hidden window of Friday
+05:00-09:00 Sydney time repeatedly led the persona to accept a New-York-morning slot that was actually
+the middle of the Sydney night.
+
 ## Expect
 
 | Field | Meaning |
