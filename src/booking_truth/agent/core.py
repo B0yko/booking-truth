@@ -828,12 +828,18 @@ class AgentCore:
                 reply=reply, messages=[user, *loop.messages, ChatMessage.assistant(reply)], user_text=text
             )
         if loop.answer.reply:
+            state = executor.ctx.state
+            # Slots offered after this turn looked the lead's bookings up are a reschedule, not a fresh
+            # booking: mark them so the reply's quick replies act on the same booking when picked, instead
+            # of running into ``already_booked`` and asking the prospect to confirm the move a second time.
+            reschedule_for = state.listed_booking_ref if state.shown is not None else None
             return TurnResult(
                 reply=loop.answer.reply,
                 claims=loop.answer.claims,
                 messages=[user, *loop.messages],
                 user_text=text,
                 from_model=True,
+                reschedule_for=reschedule_for,
             )
         reply = self._describe_writes(executor.ctx) or render.TOOL_LOOP_EXHAUSTED
         return TurnResult(

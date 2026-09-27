@@ -90,6 +90,14 @@ ALREADY_BOOKED_INSTRUCTION = (
     "The prospect already has a booking. Offer to move it with reschedule_booking instead of booking a "
     "second call."
 )
+#: Unlike :data:`ALREADY_BOOKED_INSTRUCTION`, this is for a lead who already asked to move this same
+#: booking (``list_my_bookings`` was called earlier in this turn and found it): the prospect has already
+#: agreed to the move, and this slot is the new time they picked, so no further confirmation is needed.
+ALREADY_BOOKED_MOVE_NOW_INSTRUCTION = (
+    "The prospect already asked to move this booking, and this is the new time they just picked. Call "
+    "reschedule_booking now with this booking_uid and this same slot — do not offer it again or ask a "
+    "second time."
+)
 #: The existing booking is not one this conversation is allowed to change (widget session scoping), so
 #: reschedule_booking would only fail; tell the prospect instead of offering an action that cannot work.
 ALREADY_BOOKED_ELSEWHERE_INSTRUCTION = (
@@ -297,6 +305,12 @@ class TurnState:
     #: over by another owner). Set by :class:`~booking_truth.agent.core.AgentCore` before any tool runs;
     #: checked by :meth:`ToolExecutor._dispatch_guarded` before every calendar write.
     lock_lost: asyncio.Event | None = None
+    #: The ref of the lead's one active booking, once ``list_my_bookings`` found it this turn. It marks any
+    #: slots subsequently offered as a reschedule (not a fresh booking): the core uses it to make the
+    #: turn's own quick replies reschedule actions instead of plain slot picks, and ``book_slot``/``book``
+    #: use it to tell whether an ``already_booked`` hit is a lead who already asked to move this booking
+    #: (act now) or one who never did (offer, and ask).
+    listed_booking_ref: str | None = None
 
     def event(self, guard: str, name: str, detail: str = "") -> None:
         self.events.append(GuardEvent(guard=guard, event=name, detail=detail[:300]))
@@ -935,9 +949,15 @@ class ToolExecutor:
         outcome, record, existing, _ = await self.create(start)
         if outcome == "already_booked" and existing is not None:
             changeable = self._allowed(existing.ref)
-            if changeable:
+            asked_to_move = changeable and self.state.listed_booking_ref == existing.ref
+            if changeable and not asked_to_move:
                 self.state.reschedule_offer = {"booking_uid": existing.ref, "slot_id": slot_id}
-            instruction = ALREADY_BOOKED_INSTRUCTION if changeable else ALREADY_BOOKED_ELSEWHERE_INSTRUCTION
+            if asked_to_move:
+                instruction = ALREADY_BOOKED_MOVE_NOW_INSTRUCTION
+            elif changeable:
+                instruction = ALREADY_BOOKED_INSTRUCTION
+            else:
+                instruction = ALREADY_BOOKED_ELSEWHERE_INSTRUCTION
             return {
                 "booked": False,
                 "reason": "already_booked",
@@ -966,11 +986,13 @@ class ToolExecutor:
         if outcome == "booked" and record is not None:
             return {"booked": True, "booking_uid": record.booking.ref, "start": iso_z(record.booking.start)}
         if outcome == "already_booked" and existing is not None:
+            asked_to_move = self.state.listed_booking_ref == existing.ref
+            instruction = ALREADY_BOOKED_MOVE_NOW_INSTRUCTION if asked_to_move else ALREADY_BOOKED_INSTRUCTION
             return {
                 "booked": False,
                 "reason": "already_booked",
                 "existing": {"booking_uid": existing.ref, "start": iso_z(existing.start)},
-                "instruction": ALREADY_BOOKED_INSTRUCTION,
+                "instruction": instruction,
             }
         if outcome == "unconfirmed":
             return {"booked": "unconfirmed", "instruction": UNCONFIRMED_INSTRUCTION}
@@ -1127,6 +1149,9 @@ class ToolExecutor:
         found = await self.bookings()
         if isinstance(found, Unavailable):
             return self._unavailable(found)
+        if found and self.state.listed_booking_ref is None:
+            # One active booking per lead per event key (the ``lead_lock`` policy), so the first is the one.
+            self.state.listed_booking_ref = found[0].ref
         if self.mode == "naive":
             return {
                 "bookings": [

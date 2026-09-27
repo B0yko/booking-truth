@@ -255,6 +255,47 @@ async def test_the_reschedule_offer_reply_names_the_existing_booking_through_the
     assert len(guarded.bookings()) == 1
 
 
+async def test_reschedule_pick_named_in_text_moves_it_without_asking_again(guarded: AgentEnv) -> None:
+    """Run-1 pattern: the prospect asks to move an existing booking, the agent offers new times, and the
+    prospect names one of them in plain text — not a quick-reply action. That offer already knows it is a
+    reschedule (the turn's own ``list_my_bookings`` call found the booking before it offered slots), so its
+    quick replies are ``reschedule`` actions naming the booking, never plain ``select_slot`` picks; and the
+    text pick, in the very next reply, must move the booking with ``reschedule_booking`` instead of treating
+    it as a fresh booking request and asking "Would you like me to move it?" a second time."""
+    uid = guarded.setup_booking(MON_1000)
+    offer = await guarded.say(
+        "I need to reschedule our call — something came up, can we push it to October 6th instead?"
+    )
+    quick = [q for q in offer["quick_replies"] if q.get("action")]
+    assert quick, offer["quick_replies"]
+    assert {q["action"]["type"] for q in quick} == {"reschedule"}
+    assert all(q["action"]["booking_uid"] == uid for q in quick)
+
+    picked = offer["reply"].split("\n")[1].removeprefix("- ")
+    moved = await guarded.say(f"{picked} works for me.")
+    assert "Would you like me to move it" not in moved["reply"]
+    assert moved["booking"] is not None
+    assert moved["booking"]["action"] == "rescheduled"
+    active = guarded.bookings()
+    assert len(active) == 1
+    assert not active[0]["start"].startswith(MON_1000.strftime("%Y-%m-%dT%H:%M"))
+
+
+async def test_reschedule_quick_reply_moves_it_directly_with_no_book_slot_involved(guarded: AgentEnv) -> None:
+    """The same offer, picked through its own quick reply (a client click, not text): it must go straight
+    to ``reschedule_booking`` (``_action`` routes a ``reschedule`` action with a ``slot_id`` there), never
+    through ``book_slot`` and its ``already_booked`` detour."""
+    uid = guarded.setup_booking(MON_1000)
+    offer = await guarded.say(
+        "I need to reschedule our call — something came up, can we push it to October 6th instead?"
+    )
+    pick = next(q for q in offer["quick_replies"] if q.get("action", {}).get("type") == "reschedule")
+    moved = await guarded.act(pick["action"])
+    assert moved["booking"]["action"] == "rescheduled"
+    assert moved["booking"]["ref"] != uid
+    assert len(guarded.bookings()) == 1
+
+
 async def test_a_widget_session_is_not_offered_a_reschedule_it_cannot_make(guarded: AgentEnv) -> None:
     """The policy reads the calendar across every channel and session, so a booking made outside this
     widget session still turns a second booking into ``already_booked`` here too; but reschedule and
