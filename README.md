@@ -16,7 +16,11 @@ On the 24-scenario benchmark (2026-09-27, deepseek/deepseek-v4-flash via OpenRou
 MacBook Air M5, 24 GB): the naive baseline has integrity violations in 74/120 trials and a false-success rate of
 17/120, against 0/120 and 0/120 for the guarded agent, whose pass^5 is 100% on every scenario.
 
-<!-- media: demo GIF (widget booking appearing in the sandbox) and terminal recording go here -->
+![Booking the chat widget and watching it appear in the sandbox calendar](docs/media/demo-offline.gif)
+
+The same flow with a real model behind the widget (deepseek/deepseek-v4-flash via OpenRouter): [docs/media/demo-llm.gif](docs/media/demo-llm.gif).
+
+![Terminal recording of an offline smoke test run](docs/media/test-run.svg)
 
 ## Contents
 
@@ -151,6 +155,8 @@ meetings, associations). Paths, headers, response shapes and error envelopes fol
 date it was checked and every known deviation. `GET /_ui` is a read-only view of the calendar and CRM.
 
 ## The guarded reference agent
+
+<img src="docs/media/widget-phone.png" alt="The chat widget at phone width, showing a completed booking card" width="280">
 
 `booking-truth agent serve` (port 8000) is a booking agent you can embed on a site today: an HTTP API, a single-file
 chat widget (`<script src=".../widget.js" data-agent="..." async>`, under 25 KB, no framework, no third-party

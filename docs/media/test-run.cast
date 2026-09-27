@@ -1,0 +1,11 @@
+{"version": 2, "width": 100, "height": 24, "timestamp": 1790496911, "env": {"SHELL": "/bin/zsh", "TERM": "dumb"}, "title": "booking-truth test"}
+[0.005659, "o", "$ booking-truth test --agent builtin --agent builtin:naive --sandbox auto --only smoke --k 1\r\n"]
+[0.702036, "o", "note: no LLM key configured; grading offline with scripted personas and the lexicon extractor\r\n"]
+[0.970079, "o", "preflight naive (naive): wired to the sandbox, calendar calcom\r\n"]
+[0.973702, "o", "preflight guarded (guarded): wired to the sandbox, calendar calcom\r\n"]
+[2.124913, "o", "[naive] happy-book-berlin #0: pass\r\n"]
+[2.318799, "o", "[guarded] happy-book-berlin #0: pass\r\n"]
+[3.222313, "o", "[naive] happy-book-host-zone #0: pass\r\n"]
+[3.534402, "o", "[guarded] happy-book-host-zone #0: pass\r\n"]
+[4.1604, "o", "run 20260927T081511Z: complete\r\n  guarded: 2/2 pass; pass^1 100.0% [34.2, 100.0] (2 scenarios); false-success rate 0.0% [0.0, 65.8] (0/2)\r\n  naive: 2/2 pass; pass^1 100.0% [34.2, 100.0] (2 scenarios); false-success rate 0.0% [0.0, 65.8] (0/2)\r\n  grading: offline grading\r\n"]
+[4.160982, "o", "outputs in runs/20260927T081511Z: summary.json, report.md, traces.jsonl, manifest.json\r\n"]
