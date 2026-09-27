@@ -289,48 +289,70 @@ UNAVAILABLE: tuple[re.Pattern[str], ...] = tuple(
         r"\b(?:am|pm|\d:\d\d)\s+(?:on \w+ )?(?:is|was|'s|has been) already (?:booked|taken|reserved)\b",
     )
 )
-BOOKED: tuple[re.Pattern[str], ...] = tuple(
-    re.compile(p, _I)
-    for p in (
-        r"^\W*(?:booked|confirmed|scheduled|reserved)\b\s*[:!.]",
-        r"^\W*(?:booked|confirmed)\W*$",
-        r"\byou'?re (?:all )?(?:set|booked|confirmed|scheduled|good to go|locked in|in the calendar"
-        r"|on the calendar)\b",
-        r"\byou are (?:all )?(?:set|booked|confirmed|scheduled|good to go|locked in)\b",
-        r"\ball (?:set|booked|confirmed|sorted)\b",
-        r"\b(?:i'?ve|i have|we'?ve|we have|i|we) (?:just |now |successfully |gone ahead and )?(?:booked"
-        r"|scheduled|reserved|confirmed|locked in|set up|secured|pencil(?:l)?ed|put you down|added you"
-        r"|added it|got you)\b",
-        r"\b(?:is|are|has been|have been|'s|was) (?:now )?(?:successfully |officially )?(?:booked|confirmed"
-        r"|scheduled|reserved|locked in|set up|secured|on the calendar|in the calendar|on the books)\b",
-        r"\b(?:booked|confirmed|scheduled|reserved) for\b",
-        r"\b(?:is|are|'s|has been|have been|you'?re|you are|we'?re|we are) (?:now )?(?:all )?set (?:for"
-        r"|up for)\b",
-        r"^\W*(?:booked|confirmed|scheduled|reserved)\b(?! by\b| with\b| yet\b| if\b)",
-        r"\bbooking (?:is )?confirmed\b",
-        r"\bconfirmation\b.{0,20}\b(?:sent|on its way)\b",
-        r"\bsee you (?:on |then|there|soon|at |next |tomorrow|today|this |(?:mon|tues|wednes|thurs|fri"
-        r"|satur|sun)day)",
-        r"\b(?:calendar )?invit(?:e|ation) (?:is on its way|has been sent|was sent|is in your inbox"
-        r"|is coming|should arrive|will arrive|is heading)\b",
-        r"\b(?:sent|emailed) you (?:a|an|the) (?:calendar )?(?:invite|invitation|confirmation)\b",
-        r"\byou(?:'ll| will) (?:get|receive) (?:a|an|the|your) (?:calendar )?(?:invite|invitation"
-        r"|confirmation)\b",
-        r"\b(?:sent|emailed)(?: you)? (?:a|an|the|your) (?:calendar )?(?:invite|invitation|confirmation)\b",
-        r"\b(?:it'?s|that'?s) (?:booked|confirmed|in the calendar|locked in)\b",
-        r"\bsuccessfully booked\b",
-        r"\b(?:i|we) (?:was|were) (?:finally |successfully )?able to (?:book|schedule|reserve|secure|lock in"
-        r"|get you (?:booked|in|down))\b",
-        r"\b(?:i|we) (?:finally |successfully )?managed to (?:book|schedule|reserve|secure|lock in"
-        r"|get you (?:booked|in|down))\b",
-        r"\b(?:has been|have been|is|was|'s) (?:now )?(?:successfully )?added to (?:the|your|my|our)"
-        r" calendar\b",
-        r"\b(?:booking|reservation) (?:is |was |has been )?(?:now )?(?:complete[d]?|done|successful"
-        r"|finali[sz]ed)\b",
-        r"\bgot you (?:booked|down|in)\b",
-        r"\blocked in\b",
-        r"\byou'?re already (?:booked|scheduled|confirmed)\b",
-    )
+#: A plain "see you <time>" send-off ("See you Tuesday!", "See you at 3pm."). On its own it is a booking
+#: claim (``docs/metrics.md``'s own example), but after a completed reschedule it is easily just a pleasant
+#: close restating that, not a fresh claim (:func:`_is_bare_see_you_close`, used by :func:`extract_belief`).
+_SEE_YOU_CLOSE = re.compile(
+    r"\bsee you (?:on |then|there|soon|at |next |tomorrow|today|this |(?:mon|tues|wednes|thurs|fri"
+    r"|satur|sun)day)",
+    _I,
+)
+BOOKED: tuple[re.Pattern[str], ...] = (
+    *(
+        re.compile(p, _I)
+        for p in (
+            r"^\W*(?:booked|confirmed|scheduled|reserved)\b\s*[:!.]",
+            r"^\W*(?:booked|confirmed)\W*$",
+            r"\byou'?re (?:all )?(?:set|booked|confirmed|scheduled|good to go|locked in|in the calendar"
+            r"|on the calendar)\b",
+            r"\byou are (?:all )?(?:set|booked|confirmed|scheduled|good to go|locked in)\b",
+            r"\ball (?:set|booked|confirmed|sorted)\b",
+            r"\b(?:i'?ve|i have|we'?ve|we have|i|we) (?:just |now |successfully |gone ahead and )?(?:booked"
+            r"|scheduled|reserved|confirmed|locked in|set up|secured|pencil(?:l)?ed|put you down|added you"
+            r"|added it|got you)\b",
+            r"\b(?:is|are|has been|have been|'s|was) (?:now )?(?:successfully |officially )?(?:booked"
+            r"|confirmed|scheduled|reserved|locked in|set up|secured|on the calendar|in the calendar"
+            r"|on the books)\b",
+            r"\b(?:booked|confirmed|scheduled|reserved) for\b",
+            r"\b(?:is|are|'s|has been|have been|you'?re|you are|we'?re|we are) (?:now )?(?:all )?set (?:for"
+            r"|up for)\b",
+            r"^\W*(?:booked|confirmed|scheduled|reserved)\b(?! by\b| with\b| yet\b| if\b)",
+            r"\bbooking (?:is )?confirmed\b",
+            r"\bconfirmation\b.{0,20}\b(?:sent|on its way)\b",
+            r"\b(?:calendar )?invit(?:e|ation) (?:is on its way|has been sent|was sent|is in your inbox"
+            r"|is coming|should arrive|will arrive|is heading)\b",
+            r"\b(?:sent|emailed) you (?:a|an|the) (?:calendar )?(?:invite|invitation|confirmation)\b",
+            r"\byou(?:'ll| will) (?:get|receive) (?:a|an|the|your) (?:calendar )?(?:invite|invitation"
+            r"|confirmation)\b",
+            r"\b(?:sent|emailed)(?: you)? (?:a|an|the|your) (?:calendar )?(?:invite|invitation"
+            r"|confirmation)\b",
+            r"\b(?:it'?s|that'?s) (?:booked|confirmed|in the calendar|locked in)\b",
+            r"\bsuccessfully booked\b",
+            r"\b(?:i|we) (?:was|were) (?:finally |successfully )?able to (?:book|schedule|reserve|secure"
+            r"|lock in|get you (?:booked|in|down))\b",
+            r"\b(?:i|we) (?:finally |successfully )?managed to (?:book|schedule|reserve|secure|lock in"
+            r"|get you (?:booked|in|down))\b",
+            r"\b(?:has been|have been|is|was|'s) (?:now )?(?:successfully )?added to (?:the|your|my|our)"
+            r" calendar\b",
+            r"\b(?:booking|reservation) (?:is |was |has been )?(?:now )?(?:complete[d]?|done|successful"
+            r"|finali[sz]ed)\b",
+            r"\bgot you (?:booked|down|in)\b",
+            r"\blocked in\b",
+            r"\byou'?re already (?:booked|scheduled|confirmed)\b",
+        )
+    ),
+    _SEE_YOU_CLOSE,
+)
+#: A hand-off's forward-looking purpose clause: "get you booked for Monday", "get that slot locked in",
+#: "get something scheduled" - a promise that a colleague or the agent itself will still take the action,
+#: not a claim that it already happened (``docs/metrics.md``'s `not_booked`: "a conditional... with no
+#: success claim"). Real benchmark traces showed the bare "booked for"/"locked in" patterns above matching
+#: these purpose clauses regardless of tense, since a plain proximity match cannot tell "I've booked you
+#: in" from "I'll get you booked".
+_FUTURE_BOOKING_PROMISE = re.compile(
+    r"\bget (?:you|it|that|this|something)\b[^.!?,;]{0,35}?\b(?:booked|scheduled|locked in|confirmed"
+    r"|reserved|sorted)\b",
+    _I,
 )
 HANDOFF: tuple[re.Pattern[str], ...] = tuple(
     re.compile(p, _I)
@@ -419,6 +441,8 @@ def classify(clause: str) -> Category | None:
             continue
         if category == "failure" and _crm_only_failure(text):
             continue
+        if category == "booked" and _FUTURE_BOOKING_PROMISE.search(text):
+            continue
         if any(p.search(text) for p in patterns):
             if category == "retraction" and _restates_empty(text) and any(p.search(text) for p in CANCELLED):
                 return "cancelled"
@@ -430,6 +454,16 @@ def _crm_only_failure(text: str) -> bool:
     """The clause reports a CRM failure and no other failure."""
     stripped = CRM_FAILURE.sub(" ", text)
     return stripped != text and not any(p.search(stripped) for p in FAILURE)
+
+
+def _is_bare_see_you_close(text: str) -> bool:
+    """A clause whose only booking-shaped signal is a plain "see you <time>" send-off ("See you then!",
+    "See you Monday at 3:00 PM ET."), with no more explicit completed-booking phrase alongside it. Used to
+    keep such a close from turning an already-established ``rescheduled`` belief into ``booked``
+    (:func:`extract_belief`): the send-off only restates the reschedule, it is not a fresh claim."""
+    return _SEE_YOU_CLOSE.search(text) is not None and not any(
+        p.search(text) for p in BOOKED if p is not _SEE_YOU_CLOSE
+    )
 
 
 @dataclass(frozen=True)
@@ -517,6 +551,8 @@ def extract_belief(
         if clause.category is None or clause.category not in STRONG_STATUS:
             continue
         if status == "cancelled" and clause.category == "retraction" and _restates_empty(clause.text):
+            continue
+        if status == "rescheduled" and clause.category == "booked" and _is_bare_see_you_close(clause.text):
             continue
         new_status = STRONG_STATUS[clause.category]
         new_time: TimeSpan | None = None

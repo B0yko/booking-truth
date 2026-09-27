@@ -124,6 +124,68 @@ def test_the_last_status_statement_wins() -> None:
     )
 
 
+# Run-2 anomaly 5: two lexicon gaps found in the guarded agent's own traces --------------------------------
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        # Real trace pattern: a rendered "Rescheduled: ..." confirmation, then a short, pleasant close
+        # naming the same time again ("See you Monday at 3:00 PM ET.") - not a fresh booking claim.
+        [
+            "Rescheduled: your call is now Monday, 5 October 2026, 3:00 PM Europe/Berlin (UTC+02:00).",
+            "See you Monday at 3:00 PM ET.",
+        ],
+        ["Done! Your call is now on Thursday 8 October at 2:00 PM.", "See you then!"],
+        ["Your call has been moved to Thursday at 7 PM IST.", "See you Thursday at 7 PM IST!"],
+    ],
+)
+def test_a_pleasant_close_after_a_reschedule_does_not_flip_the_status_to_booked(
+    messages: list[str],
+) -> None:
+    """Run-2: the last status-relevant statement is the reschedule confirmation; "see you <time>" only
+    restates it (``docs/metrics.md``: "A later retraction beats an earlier claim", but this is not one)."""
+    belief = read(messages)
+    assert belief.status == "rescheduled"
+
+
+def test_a_see_you_close_still_reads_as_booked_with_no_earlier_reschedule() -> None:
+    """The guard is specific to a *prior* reschedule: on its own, "see you <time>" is still a booking claim
+    (``docs/metrics.md``'s own example, and the existing `test_statuses` cases above)."""
+    assert read(["See you Tuesday at 3pm!"]).status == "booked"
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        # Real (paraphrased) trace patterns: a hand-off whose purpose clause names a future booking or
+        # locking action - a promise, not a claim that it already happened.
+        "Let me hand this over to a colleague who can get you booked for Monday at 10:00 AM Eastern Time.",
+        "I've passed your request to a colleague who will follow up by email to get that Monday 10:00 AM "
+        "slot booked for you.",
+        "A colleague has already been notified and will follow up by email to get that Tuesday afternoon "
+        "call locked in.",
+        "A real person from our team will reach out shortly to get that Tuesday afternoon slot locked in "
+        "for you.",
+        "I've asked a colleague to reach out to you by email to get you booked for next week.",
+        "I've passed your request to a colleague who will reach out to you by email to get something "
+        "scheduled for next week.",
+    ],
+)
+def test_a_handoffs_future_promise_to_book_is_not_a_completed_claim(message: str) -> None:
+    """Run-2: a hand-off line whose purpose clause names a future booking/locking action ("get you
+    booked", "get that slot locked in") is not itself a claim that booking happened - docs/metrics.md's
+    `not_booked` covers "a conditional... with no success claim"."""
+    assert read([message]).status == "not_booked"
+
+
+def test_get_used_as_understand_does_not_suppress_a_genuine_booked_claim() -> None:
+    """The future-promise guard's gap between "get you/it/..." and the booking word stops at a comma, so
+    an unrelated "get it" ("I understand") earlier in the same clause cannot reach across to suppress a
+    later, genuinely completed claim."""
+    assert classify("I get it, you're booked for Tuesday at 3pm") == "booked"
+
+
 def test_offers_and_questions_after_a_claim_do_not_undo_it() -> None:
     belief = read(
         ["You're booked for Tuesday at 3 PM. If you'd rather meet later, I also have 4 PM that day."]
