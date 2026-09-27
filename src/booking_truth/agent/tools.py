@@ -602,7 +602,7 @@ class ToolExecutor:
 
     # find_slots --------------------------------------------------------------------------------------------
 
-    def _dates(self, args: Mapping[str, Any]) -> tuple[date, date]:
+    def _dates(self, args: Mapping[str, Any], zone: str) -> tuple[date, date]:
         values = []
         for name in ("from_date", "to_date"):
             raw = args.get(name)
@@ -617,11 +617,25 @@ class ToolExecutor:
             raise ArgumentError("to_date must not be before from_date")
         if (last - first).days + 1 > MAX_RANGE_DAYS:
             raise ArgumentError(f"the range must be at most {MAX_RANGE_DAYS} days")
+        # ``dates_zone`` is the zone these dates are already expressed in (the lead's zone for the guarded
+        # tool, UTC for the naive one, per ADR 0007) — so a UTC calendar day that starts before the lead's
+        # local midnight is not "the past": ``find_slots`` below still clamps the actual lookup to ``now``
+        # and returns correct, current slots for it (see the guarded/naive fixture tests). Only a range whose
+        # last day is already behind ``now`` in that same zone can never contain a bookable slot: that is a
+        # date the model computed wrong (this is input validation, not a guard — the check and its wording
+        # are identical for both modes), most often a stale year carried over from the model's own priors
+        # rather than the code-computed ``today`` in the system prompt's context block.
+        today = self.now.astimezone(ZoneInfo(zone)).date()
+        if last < today:
+            raise ArgumentError(
+                f"that range is entirely in the past. Today is {today.isoformat()} "
+                f"({today.strftime('%A')}). Call find_slots again with dates from today onward."
+            )
         return first, last
 
     async def _find_slots(self, args: dict[str, Any]) -> Any:
-        first, last = self._dates(args)
         zone = self.ctx.zone if self.mode == "guarded" else "UTC"
+        first, last = self._dates(args, zone)
         return await self.find_slots(first, last, zone)
 
     def _retry_lookup(self, found: object) -> bool:

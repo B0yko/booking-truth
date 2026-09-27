@@ -135,6 +135,52 @@ async def test_a_range_starting_in_the_past_starts_now(guarded: AgentEnv) -> Non
     assert starts[0] == "10:00"
 
 
+async def test_a_range_entirely_in_the_past_is_rejected_not_queried(guarded: AgentEnv) -> None:
+    # NOW is 2026-10-01 (a Thursday) in agent_env; a stale-year range like this is exactly the shape a
+    # model occasionally invents (see docs/adr/0010-find-slots-past-range-rejection.md).
+    tools = executor(guarded)
+    result = await tools.run("find_slots", {"from_date": "2025-04-08", "to_date": "2025-04-11"})
+    assert result["error"] == "invalid_arguments"
+    assert "2026-10-01" in result["detail"]
+    assert "Thursday" in result["detail"]
+    assert "today onward" in result["detail"]
+    # The sandbox is never even asked: this is input validation, not a fail-closed calendar read.
+    assert guarded.log("slots") == []
+
+
+async def test_a_range_ending_today_is_not_rejected(guarded: AgentEnv) -> None:
+    # A range that starts a day early but still reaches today is not "entirely in the past": the existing
+    # clamp-to-now behaviour (above) already gives a correct answer for it, so it must not be rejected.
+    tools = executor(guarded)
+    result = await tools.run("find_slots", {"from_date": "2026-09-25", "to_date": "2026-10-01"})
+    assert "error" not in result
+
+
+async def test_naive_agent_gets_the_past_range_rejection_as_text(naive: AgentEnv) -> None:
+    result = await executor(naive).run("find_slots", {"from_date": "2025-04-08", "to_date": "2025-04-11"})
+    assert isinstance(result, str)
+    assert result.startswith("Error: invalid arguments")
+    assert "2026-10-01" in result
+    assert "Thursday" in result
+
+
+async def test_naive_range_is_checked_against_utc_today_not_the_lead_zone(naive: AgentEnv) -> None:
+    # Naive's find_slots is documented (ADR 0007) to take UTC dates, so the rejection must use UTC "today",
+    # not the lead's zone: a positive-offset lead zone's local calendar day legitimately runs ahead of the
+    # UTC one, and that must keep working exactly as it did before this check existed.
+    tools = executor(naive, zone="Asia/Kolkata")
+    result = await tools.run("find_slots", {"from_date": "2026-10-01", "to_date": "2026-10-01"})
+    assert "available_starts_utc" in result
+
+
+async def test_a_model_that_corrects_the_year_gets_slots_on_the_retry(guarded: AgentEnv) -> None:
+    tools = executor(guarded)
+    mistaken = await tools.run("find_slots", {"from_date": "2025-04-08", "to_date": "2025-04-11"})
+    assert mistaken["error"] == "invalid_arguments"
+    corrected = await tools.run("find_slots", {"from_date": "2026-10-05", "to_date": "2026-10-09"})
+    assert len(corrected["slots"]) == 12
+
+
 @pytest.mark.parametrize(
     ("args", "detail"),
     [
