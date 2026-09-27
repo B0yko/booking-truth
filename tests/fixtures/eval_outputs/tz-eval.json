@@ -1,0 +1,48 @@
+{
+  "dataset": "datasets/tz_phrases.jsonl",
+  "deterministic": {
+    "counts": {
+      "correct": 61,
+      "correctly_flagged": 15,
+      "missed_ambiguity": 5,
+      "over_cautious": 19,
+      "silent_wrong_resolution": 0
+    },
+    "headline": "silent_wrong_resolution",
+    "n": 100,
+    "rates": {
+      "correct": 0.61,
+      "correctly_flagged": 0.15,
+      "missed_ambiguity": 0.05,
+      "over_cautious": 0.19,
+      "silent_wrong_resolution": 0.0
+    }
+  },
+  "equivalence_window": {
+    "horizon_days": 730,
+    "start": "2026-01-01T00:00:00Z"
+  },
+  "eval": "tz",
+  "llm": {
+    "counts": {
+      "correct": 74,
+      "correctly_flagged": 11,
+      "missed_ambiguity": 9,
+      "over_cautious": 5,
+      "silent_wrong_resolution": 1
+    },
+    "headline": "silent_wrong_resolution",
+    "n": 100,
+    "rates": {
+      "correct": 0.74,
+      "correctly_flagged": 0.11,
+      "missed_ambiguity": 0.09,
+      "over_cautious": 0.05,
+      "silent_wrong_resolution": 0.01
+    }
+  },
+  "llm_skipped_reason": null,
+  "model": "deepseek/deepseek-v4-flash",
+  "n_items": 100,
+  "split": "test"
+}

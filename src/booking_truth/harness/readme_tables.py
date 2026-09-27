@@ -2,13 +2,17 @@
 
 Each table sits between ``<!-- bt:<id> -->`` and ``<!-- /bt:<id> -->`` markers. The ids are ``headline``,
 ``faults``, ``tz``, ``cost``, ``tz-eval``, ``extractor-eval``, ``failures`` and ``ci``. A results directory
-(``results/<run-id>/``) holds the benchmark run (``summary.json``, ``manifest.json``) and, when they were run:
+(``results/<run-id>/``, documented in ``results/README.md``) holds the benchmark run (``summary.json``,
+``manifest.json``) and, when they were run:
 
-- ``eval_tz.json``: the timezone resolver eval on the held-out test phrases, ``{"n": N, "model": "<id>",
-  "methods": {"<name>": {"correct": x, "ambiguous_flagged": y, "silent_wrong": z}}}``;
-- ``eval_extractor.json``: the belief-extractor eval on the held-out test transcripts, ``{"n": N, "model":
-  "<id>", "methods": {"<name>": {"status_accuracy": r, "time_accuracy": r, "success_recall": r | null}}}``;
-- ``ci_fixtures.json``: the offline guard fixtures,
+- ``tz-eval.json`` (written by ``booking-truth eval tz``): the timezone resolver eval on the held-out test
+  phrases, ``booking_truth.evals.tz_eval.TzEvalResult.to_json`` - ``{"n_items": N, "model": "<id>",
+  "deterministic": {"n", "counts": {<category>: x, ...}, "rates": {...}}, "llm": <same shape> | null}``;
+- ``extractor-eval.json`` (written by ``booking-truth eval extractor``): the belief-extractor eval on the
+  held-out test transcripts, ``booking_truth.evals.extractor_eval.ExtractorEvalResult.to_json`` -
+  ``{"n_items": N, "model": "<id>", "lexicon": {"n", "status_accuracy", "time_match_accuracy",
+  "success_recall"}, "llm": <same shape> | null}``;
+- ``ci_fixtures.json`` (written by ``scripts/export_ci_fixtures.py``): the offline guard fixtures,
   ``{"fixtures": [{"name": ..., "status": "pass" | "fail"}]}``;
 - ``failure_notes.yaml``: a root-cause paragraph per trace id of a guarded integrity violation.
 
@@ -49,8 +53,10 @@ TABLE_IDS: tuple[str, ...] = (
     "failures",
     "ci",
 )
-EVAL_TZ_FILE = "eval_tz.json"
-EVAL_EXTRACTOR_FILE = "eval_extractor.json"
+#: The eval CLI's own output names (``booking_truth.evals.cli.TZ_JSON``/``EXTRACTOR_JSON``); kept as
+#: string literals here (not imported) so this module does not depend on ``booking_truth.evals``.
+EVAL_TZ_FILE = "tz-eval.json"
+EVAL_EXTRACTOR_FILE = "extractor-eval.json"
 CI_FILE = "ci_fixtures.json"
 FAILURE_NOTES_FILE = "failure_notes.yaml"
 NOT_RUN = "not run"
@@ -61,6 +67,14 @@ _HEADLINE_RATES: tuple[tuple[str, str], ...] = (
     ("wrong_time", "Wrong-time rate"),
     ("unclaimed_booking", "Unclaimed-booking rate"),
     ("crm_mismatch", "CRM-mismatch rate"),
+)
+#: ``booking_truth.evals.tz_eval.CATEGORIES``, in report order (kept as literals for the same reason).
+_TZ_CATEGORIES: tuple[tuple[str, str], ...] = (
+    ("correct", "Correct"),
+    ("correctly_flagged", "Correctly flagged ambiguous"),
+    ("missed_ambiguity", "Missed ambiguity"),
+    ("over_cautious", "Over-cautious (asked needlessly)"),
+    ("silent_wrong_resolution", "Silent wrong resolution (the number that matters)"),
 )
 
 
@@ -259,46 +273,51 @@ def _model(data: Mapping[str, Any]) -> str:
     return f"; LLM: {model}" if isinstance(model, str) and model else ""
 
 
+def _tz_row(label: str, side: Mapping[str, Any] | None) -> list[str]:
+    if not isinstance(side, Mapping):
+        return [label, *(["n/a"] * len(_TZ_CATEGORIES))]
+    counts, rates, n = side.get("counts") or {}, side.get("rates") or {}, side.get("n")
+    return [
+        label,
+        *(f"{pct(rates.get(key))} ({_count(counts.get(key))}/{_count(n)})" for key, _ in _TZ_CATEGORIES),
+    ]
+
+
 def render_tz_eval(results: Results) -> str:
     data = results.eval_tz
-    header = ["Method", "Correct", "Correctly flagged ambiguous", "Silent wrong resolutions"]
-    if not data or not isinstance(data.get("methods"), dict):
-        return _with_caption(results, table(header, [[NOT_RUN, "-", "-", "-"]]))
-    n = data.get("n")
-    rows = [
-        [
-            str(name),
-            f"{_count(entry.get('correct'))}/{_count(n)}",
-            f"{_count(entry.get('ambiguous_flagged'))}/{_count(n)}",
-            f"{_count(entry.get('silent_wrong'))}/{_count(n)}",
-        ]
-        for name, entry in data["methods"].items()
-        if isinstance(entry, dict)
-    ]
-    note = f"Held-out test phrases: {_count(n)}{_model(data)}."
+    header = ["Resolver", *(label for _, label in _TZ_CATEGORIES)]
+    if not data or not isinstance(data.get("deterministic"), Mapping):
+        return _with_caption(results, table(header, [[NOT_RUN, *(["-"] * len(_TZ_CATEGORIES))]]))
+    llm_side = data.get("llm")
+    rows = [_tz_row("Deterministic", data["deterministic"]), _tz_row("LLM-only (same model)", llm_side)]
+    note = f"Held-out test phrases: {_count(data.get('n_items'))}{_model(data)}."
+    if data.get("llm") is None:
+        note += f" LLM-only side not run: {data.get('llm_skipped_reason') or 'no LLM key configured'}."
     return _with_caption(results, [*table(header, rows), "", note])
+
+
+def _extractor_row(label: str, entry: Mapping[str, Any] | None) -> list[str]:
+    if not isinstance(entry, Mapping):
+        return [label, "n/a", "n/a", "n/a"]
+    recall = entry.get("success_recall")
+    return [
+        label,
+        pct(entry.get("status_accuracy")),
+        pct(entry.get("time_match_accuracy")),
+        pct(recall) if recall is not None else "-",
+    ]
 
 
 def render_extractor_eval(results: Results) -> str:
     data = results.eval_extractor
     header = ["Extractor", "Status accuracy", "Time-match accuracy", "Recall on success claims"]
-    if not data or not isinstance(data.get("methods"), dict):
+    if not data or not isinstance(data.get("lexicon"), Mapping):
         lines = table(header, [[NOT_RUN, "-", "-", "-"]])
     else:
-        rows = []
-        for name, entry in data["methods"].items():
-            if not isinstance(entry, dict):
-                continue
-            recall = entry.get("success_recall")
-            rows.append(
-                [
-                    str(name),
-                    pct(entry.get("status_accuracy")),
-                    pct(entry.get("time_accuracy")),
-                    pct(recall) if recall is not None else "-",
-                ]
-            )
-        note = f"Held-out test transcripts: {_count(data.get('n'))}{_model(data)}."
+        rows = [_extractor_row("Lexicon", data.get("lexicon")), _extractor_row("LLM", data.get("llm"))]
+        note = f"Held-out test transcripts: {_count(data.get('n_items'))}{_model(data)}."
+        if data.get("llm") is None:
+            note += f" LLM extractor not run: {data.get('llm_skipped_reason') or 'no LLM key configured'}."
         lines = [*table(header, rows), "", note]
     summary = results.summary
     grading = (results.manifest.get("grading") or {}).get("mode")

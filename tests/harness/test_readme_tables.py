@@ -11,6 +11,8 @@ import pytest
 from fake_run import standard_slots, write_fake_run
 
 from booking_truth.harness.readme_tables import (
+    EVAL_EXTRACTOR_FILE,
+    EVAL_TZ_FILE,
     TABLE_IDS,
     ReadmeTablesError,
     apply_tables,
@@ -62,25 +64,64 @@ def test_missing_eval_and_ci_inputs_render_not_run_rows(results: Path) -> None:
 
 
 def test_eval_and_ci_inputs_fill_their_tables(results: Path) -> None:
-    (results / "eval_tz.json").write_text(
+    """The eval CLI's actual output names and schema (``booking-truth eval tz``/``eval extractor``), not
+    the file names or the invented shape an earlier version of this module expected."""
+    (results / EVAL_TZ_FILE).write_text(
         json.dumps(
             {
-                "n": 100,
-                "methods": {
-                    "resolver": {"correct": 90, "ambiguous_flagged": 8, "silent_wrong": 2},
-                    "llm only": {"correct": 80, "ambiguous_flagged": 3, "silent_wrong": 17},
+                "n_items": 100,
+                "model": "vendor/model-a",
+                "deterministic": {
+                    "n": 100,
+                    "counts": {
+                        "correct": 90,
+                        "correctly_flagged": 8,
+                        "missed_ambiguity": 0,
+                        "over_cautious": 0,
+                        "silent_wrong_resolution": 2,
+                    },
+                    "rates": {
+                        "correct": 0.9,
+                        "correctly_flagged": 0.08,
+                        "missed_ambiguity": 0.0,
+                        "over_cautious": 0.0,
+                        "silent_wrong_resolution": 0.02,
+                    },
                 },
+                "llm": {
+                    "n": 100,
+                    "counts": {
+                        "correct": 80,
+                        "correctly_flagged": 3,
+                        "missed_ambiguity": 0,
+                        "over_cautious": 0,
+                        "silent_wrong_resolution": 17,
+                    },
+                    "rates": {
+                        "correct": 0.8,
+                        "correctly_flagged": 0.03,
+                        "missed_ambiguity": 0.0,
+                        "over_cautious": 0.0,
+                        "silent_wrong_resolution": 0.17,
+                    },
+                },
+                "llm_skipped_reason": None,
             }
         )
     )
-    (results / "eval_extractor.json").write_text(
+    (results / EVAL_EXTRACTOR_FILE).write_text(
         json.dumps(
             {
-                "n": 80,
-                "methods": {
-                    "llm": {"status_accuracy": 0.95, "time_accuracy": 0.9, "success_recall": None},
-                    "lexicon": {"status_accuracy": 0.9, "time_accuracy": 0.85, "success_recall": 0.97},
+                "n_items": 80,
+                "model": "vendor/model-a",
+                "lexicon": {
+                    "n": 80,
+                    "status_accuracy": 0.9,
+                    "time_match_accuracy": 0.85,
+                    "success_recall": 0.97,
                 },
+                "llm": {"n": 80, "status_accuracy": 0.95, "time_match_accuracy": 0.9, "success_recall": None},
+                "llm_skipped_reason": None,
             }
         )
     )
@@ -90,12 +131,37 @@ def test_eval_and_ci_inputs_fill_their_tables(results: Path) -> None:
         )
     )
     tables = render_tables(results)
-    assert "| resolver | 90/100 | 8/100 | 2/100 |" in tables["tz-eval"]
-    assert "| lexicon | 90.0% | 85.0% | 97.0% |" in tables["extractor-eval"]
-    assert "| llm | 95.0% | 90.0% | - |" in tables["extractor-eval"]
+    tz = tables["tz-eval"]
+    expected_row = (
+        "| Deterministic | 90.0% (90/100) | 8.0% (8/100) | 0.0% (0/100) | 0.0% (0/100) | 2.0% (2/100) |"
+    )
+    assert expected_row in tz
+    assert "| LLM-only (same model) |" in tz
+    assert "| Lexicon | 90.0% | 85.0% | 97.0% |" in tables["extractor-eval"]
+    assert "| LLM | 95.0% | 90.0% | - |" in tables["extractor-eval"]
     assert "| naive | 100.0% [20.7, 100.0] (1/1) |" in tables["extractor-eval"]
     assert "`20261001-bench/naive/fault-slots-500-once/0/1`" in tables["extractor-eval"]
     assert "| 2 | 1 | 1 |" in tables["ci"]
+
+
+def test_eval_tables_render_a_real_run_s_output_byte_for_byte_faithfully(results: Path) -> None:
+    """The eval CLI's real output (a trimmed copy of an actual ``booking-truth eval tz``/``eval
+    extractor`` run), not a hand-written stand-in for its schema."""
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures" / "eval_outputs"
+    (results / EVAL_TZ_FILE).write_text((fixtures / "tz-eval.json").read_text(encoding="utf-8"))
+    extractor_fixture = (fixtures / "extractor-eval.json").read_text(encoding="utf-8")
+    (results / EVAL_EXTRACTOR_FILE).write_text(extractor_fixture)
+    tables = render_tables(results)
+    tz = tables["tz-eval"]
+    expected_row = (
+        "| Deterministic | 61.0% (61/100) | 15.0% (15/100) | 5.0% (5/100) | 19.0% (19/100) | 0.0% (0/100) |"
+    )
+    assert expected_row in tz
+    assert "| LLM-only (same model) | 74.0% (74/100) |" in tz
+    assert "deepseek/deepseek-v4-flash" in tz
+    extractor = tables["extractor-eval"]
+    assert "| Lexicon | 92.5% | 88.8% | 100.0% |" in extractor
+    assert "| LLM | 93.8% | 98.8% | 100.0% |" in extractor
 
 
 def test_failures_lists_guarded_violations_with_their_root_cause(results: Path) -> None:
