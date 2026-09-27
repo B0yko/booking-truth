@@ -473,6 +473,7 @@ def test_cli_serve_runs_uvicorn_with_the_configured_token(monkeypatch: pytest.Mo
     assert result.exit_code == 0, result.output
     assert (seen["host"], seen["port"]) == ("127.0.0.1", 8100)
     assert seen["app"].state.sandbox_token == "sandbox"
-    help_text = runner.invoke(sandbox_cli.app, ["serve", "--help"]).output
+    raw_help = runner.invoke(sandbox_cli.app, ["serve", "--help"]).output
+    help_text = re.sub(r"\x1b\[[0-9;]*m", "", raw_help)  # CI terminals get ANSI styling
     assert "--host" in help_text
     assert "--port" in help_text
