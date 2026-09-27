@@ -158,3 +158,16 @@ def test_error_texts_keep_no_absolute_path() -> None:
 def test_scrub_rewrites_keys_and_values() -> None:
     value = {"http://10.0.0.5:1/x": ["see " + "/" + "tmp/run/out.json", {"n": 1}]}
     assert scrub(value) == {f"http://{HOST_PLACEHOLDER}:1/x": ["see out.json", {"n": 1}]}
+
+
+def test_scrub_masks_bare_ip_addresses_but_keeps_loopback() -> None:
+    from booking_truth.harness.redact import scrub_text
+
+    text = (
+        "Cannot connect to host 198.51.100.24:80 [Connect call failed ('198.51.100.24', 80)]; local 127.0.0.1"
+    )
+    assert (
+        scrub_text(text)
+        == "Cannot connect to host [ip]:80 [Connect call failed ('[ip]', 80)]; local 127.0.0.1"
+    )
+    assert scrub_text("version 2026.4 and 1.63.0") == "version 2026.4 and 1.63.0"

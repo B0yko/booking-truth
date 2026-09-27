@@ -113,9 +113,18 @@ def shorten_paths(text: str) -> str:
     return strip_home_paths(ABS_PATH.sub(lambda m: short_path(m[0]), text))
 
 
+_OCTET = r"(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)"
+BARE_IPV4 = re.compile(rf"(?<![\d.]){_OCTET}(?:\.{_OCTET}){{3}}(?![\d.])")
+
+
+def mask_ip_addresses(text: str) -> str:
+    """Replace every bare IPv4 address except loopback with ``[ip]`` (upstream error messages quote them)."""
+    return BARE_IPV4.sub(lambda m: m[0] if m[0].startswith("127.") else "[ip]", text)
+
+
 def scrub_text(text: str) -> str:
-    """:func:`mask_url_hosts` and :func:`shorten_paths` on one string."""
-    return shorten_paths(mask_url_hosts(text))
+    """:func:`mask_url_hosts`, :func:`mask_ip_addresses` and :func:`shorten_paths` on one string."""
+    return shorten_paths(mask_ip_addresses(mask_url_hosts(text)))
 
 
 def scrub(value: Any) -> Any:
