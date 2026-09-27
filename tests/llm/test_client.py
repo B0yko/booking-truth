@@ -12,7 +12,7 @@ import respx
 import yaml
 
 from booking_truth.config import Settings
-from booking_truth.llm.client import OpenAICompatClient
+from booking_truth.llm.client import HARNESS_LLM_MAX_RETRIES, OpenAICompatClient
 from booking_truth.llm.ledger import CostLedger, LedgerError
 from booking_truth.llm.pricing import PriceTable
 from booking_truth.llm.types import BudgetExceeded, ChatMessage, LLMError, PricingError, ToolSpec
@@ -511,6 +511,22 @@ async def test_from_settings_wires_every_llm_variable(
     assert "x-openrouter-metadata" not in route.calls[0].request.headers
     await client.aclose()
     await other.aclose()
+
+
+def test_from_settings_keeps_the_default_retry_budget_unless_overridden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The agent's own live calls (no ``max_retries`` passed) keep the constructor's default; the harness
+    (persona, extractor, ``eval tz``/``eval extractor``) passes ``HARNESS_LLM_MAX_RETRIES`` explicitly, for
+    resilience to a transient 429 or 5xx that is the harness's problem to ride out, not the agent's."""
+    config = settings(tmp_path, monkeypatch, llm_api_key=KEY, ledger_dir=tmp_path / "ledger")
+    agent_client = OpenAICompatClient.from_settings(config, component="agent")
+    assert agent_client.max_retries == 2
+    harness_client = OpenAICompatClient.from_settings(
+        config, component="persona", max_retries=HARNESS_LLM_MAX_RETRIES
+    )
+    assert harness_client.max_retries == HARNESS_LLM_MAX_RETRIES
+    assert HARNESS_LLM_MAX_RETRIES > 2
 
 
 def test_bundled_table_is_used_without_bt_pricing_path(

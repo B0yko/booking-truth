@@ -16,6 +16,8 @@ from booking_truth.cli import app
 from booking_truth.config import Settings
 from booking_truth.harness.cli_test import reproduce_command
 from booking_truth.harness.report import MANIFEST_FILE, REPORT_FILE, SUMMARY_FILE, TRACES_FILE
+from booking_truth.llm.client import HARNESS_LLM_MAX_RETRIES, OpenAICompatClient
+from booking_truth.llm.types import LLMError
 
 runner = CliRunner()
 
@@ -65,6 +67,28 @@ def test_builtin_needs_the_bundled_agent_module(monkeypatch: pytest.MonkeyPatch)
     result = invoke("test", "--agent", "builtin", "--sandbox", "auto", "--only", "smoke", "--k", "1")
     assert result.exit_code == 2
     assert "the bundled agent is not available in this installation" in result.output
+
+
+def test_persona_and_extractor_llm_clients_use_the_harness_retry_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``persona_llm``/``extractor_llm`` are harness-side infrastructure, not the agent under test, so a
+    transient 429 or 5xx on one of their calls should be the harness's problem to ride out (run-2: a
+    single upstream 429 on the persona's own call ended a trial as ``harness_error`` after only the
+    constructor's default 2 retries). Both must be built with ``HARNESS_LLM_MAX_RETRIES``."""
+    calls: list[dict[str, Any]] = []
+
+    def fake_from_settings(cls: type[OpenAICompatClient], settings: Settings, **kwargs: Any) -> Any:
+        calls.append(kwargs)
+        raise LLMError("stop right after recording the wiring", kind="offline")
+
+    monkeypatch.setattr(OpenAICompatClient, "from_settings", classmethod(fake_from_settings))
+    monkeypatch.setenv("BT_LLM_API_KEY", "sk-test-key")
+    result = invoke("test", "--agent", "builtin", "--sandbox", "auto", "--only", "smoke", "--k", "1")
+    assert result.exit_code == 2, result.output
+    assert len(calls) == 1  # persona_llm's construction raised before extractor_llm was ever built
+    assert calls[0]["component"] == "persona"
+    assert calls[0]["max_retries"] == HARNESS_LLM_MAX_RETRIES
 
 
 def test_builtin_agents_run_in_process_against_auto_sandboxes(

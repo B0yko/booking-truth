@@ -14,7 +14,7 @@ from booking_truth.config import Settings, load_settings
 from booking_truth.evals.extractor_eval import render_extractor_eval_md, run_extractor_eval
 from booking_truth.evals.tz_eval import render_tz_eval_md, run_tz_eval
 from booking_truth.harness.report import dumps
-from booking_truth.llm.client import OpenAICompatClient
+from booking_truth.llm.client import HARNESS_LLM_MAX_RETRIES, OpenAICompatClient
 from booking_truth.llm.types import LLMError
 
 app = typer.Typer(
@@ -75,7 +75,9 @@ def _client(
     resolved_model = model or settings.llm_model
     if settings.offline:
         return None, resolved_model
-    client = OpenAICompatClient.from_settings(settings, component=component, model=resolved_model)
+    client = OpenAICompatClient.from_settings(
+        settings, component=component, model=resolved_model, max_retries=HARNESS_LLM_MAX_RETRIES
+    )
     if budget_usd is not None:
         client.budget_usd = budget_usd
     return client, resolved_model

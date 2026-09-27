@@ -67,7 +67,7 @@ from booking_truth.harness.runner import (
 )
 from booking_truth.harness.sandbox_client import DEFAULT_TOKEN
 from booking_truth.harness.scenarios import ResolvedScenario, ScenarioError, load_suite, select_scenarios
-from booking_truth.llm.client import OpenAICompatClient
+from booking_truth.llm.client import HARNESS_LLM_MAX_RETRIES, OpenAICompatClient
 from booking_truth.llm.types import LLMError
 from booking_truth.serve import BackgroundServer
 
@@ -491,10 +491,16 @@ def cmd_test(
     try:
         if not offline:
             persona_llm = OpenAICompatClient.from_settings(
-                settings, component="persona", model=persona_model_id
+                settings,
+                component="persona",
+                model=persona_model_id,
+                max_retries=HARNESS_LLM_MAX_RETRIES,
             )
             extractor_llm = OpenAICompatClient.from_settings(
-                settings, component="extractor", model=extractor_model_id
+                settings,
+                component="extractor",
+                model=extractor_model_id,
+                max_retries=HARNESS_LLM_MAX_RETRIES,
             )
 
             def _make_persona(resolved: ResolvedScenario, supports_actions: bool) -> Persona:

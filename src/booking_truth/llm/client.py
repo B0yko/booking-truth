@@ -89,6 +89,13 @@ _NOT_SENT = frozenset(
 _SECRETISH = re.compile(r"(sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+)")
 _MAX_DETAIL = 400
 
+#: Retry budget for harness-side LLM calls (the persona, the belief extractor, and ``eval tz``/``eval
+#: extractor``): infrastructure around the benchmark, not the agent under test, so riding out a transient
+#: rate limit or 5xx costs only time, never a trial or eval item. The constructor's own default (2) is
+#: unchanged for the agent's own calls, which :func:`OpenAICompatClient.from_settings` still uses when a
+#: caller does not pass ``max_retries``.
+HARNESS_LLM_MAX_RETRIES = 6
+
 
 class OpenAICompatClient:
     """Implements :class:`booking_truth.llm.types.LLM` with the official ``openai`` SDK.
@@ -173,15 +180,24 @@ class OpenAICompatClient:
         model: str | None = None,
         ledger_dir: Path | None = None,
         http_client: httpx.AsyncClient | None = None,
+        max_retries: int | None = None,
     ) -> OpenAICompatClient:
         """Wire ``BT_LLM_BASE_URL``, ``BT_LLM_API_KEY``, ``BT_LLM_PROVIDER``, ``BT_PRICING_PATH``,
-        ``BT_LEDGER_DIR`` and ``BT_BUDGET_USD``. Raises :class:`LLMError` (kind ``offline``) without a key."""
+        ``BT_LEDGER_DIR`` and ``BT_BUDGET_USD``. Raises :class:`LLMError` (kind ``offline``) without a key.
+
+        ``max_retries`` overrides the constructor's default (2) when given; callers around the harness
+        and its evals pass :data:`HARNESS_LLM_MAX_RETRIES` here, since those calls are test
+        infrastructure, not the agent under test, so a longer retry budget costs nothing but time.
+        """
         key = settings.llm_api_key.get_secret_value().strip() if settings.llm_api_key is not None else ""
         if settings.offline or not key:
             raise LLMError(
                 "no LLM API key is configured (BT_LLM_API_KEY is empty), so live LLM calls are off",
                 kind="offline",
             )
+        kwargs: dict[str, Any] = {}
+        if max_retries is not None:
+            kwargs["max_retries"] = max_retries
         return cls(
             settings.llm_base_url,
             key,
@@ -193,6 +209,7 @@ class OpenAICompatClient:
             ),
             budget_usd=settings.budget_usd,
             http_client=http_client,
+            **kwargs,
         )
 
     # Lifecycle ---------------------------------------------------------------------------------
