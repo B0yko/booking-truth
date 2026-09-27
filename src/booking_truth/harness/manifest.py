@@ -2,7 +2,10 @@
 
 It records the date, the ``--as-of`` date, the hardware, the harness version and git SHA, the
 scenario-suite hash, each agent's version and source hash, the model ids, the models and providers the calls
-returned (flagged when they varied), temperatures and the total spend.
+returned (flagged when they varied), temperatures and the total spend. A call whose response carried no
+model or provider at all is still counted, in an explicit "unknown" bucket per component
+(``llm_calls.<component>.unknown_attribution_calls``); ``llm_attribution_incomplete`` flags the whole run
+when any component has one, so a gap in cost attribution is never misread as a run that made no calls.
 
 The hardware comes from ``sysctl`` (model and memory) or ``--hardware``; the machine's host name is never
 read. No absolute path, email address or URL host other than ``localhost`` is ever written.
@@ -99,11 +102,19 @@ def suite_hash(directory: Path) -> str:
 @dataclass
 class CallRecorder:
     """Returned model ids and upstream providers per component (``persona``, ``extractor``,
-    ``agent:<label>``), with the number of calls that returned each (model, provider) pair."""
+    ``agent:<label>``), with the number of calls that returned each (model, provider) pair.
+
+    A call whose response carries no model or provider at all (for example a cache hit that an
+    upstream router reports with neither field) is still a real call and must still be counted: it
+    joins the same component's ``calls`` total and its own explicit ``("", "")`` pair, which
+    :meth:`to_json` reports as ``unknown_attribution_calls`` so a run with any gap in its cost
+    attribution is flagged rather than silently read as a run that made no calls at all.
+    """
 
     models: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     providers: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     calls: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    unknown: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     pairs: dict[str, dict[tuple[str, str], int]] = field(
         default_factory=lambda: defaultdict(lambda: defaultdict(int))
     )
@@ -114,6 +125,8 @@ class CallRecorder:
             self.models[component].add(model)
         if provider:
             self.providers[component].add(provider)
+        if not model and not provider:
+            self.unknown[component] += 1
         self.pairs[component][(model or "", provider or "")] += 1
 
     def record_usage(self, component: str, usage: Mapping[str, Any] | None) -> None:
@@ -122,31 +135,39 @@ class CallRecorder:
         The bundled protocol's ``usage.models``/``usage.providers`` (plural: see
         ``booking_truth.agent.loop.Usage.to_json``) are the distinct ids and providers every internal
         model call of that turn returned, already deduplicated by the agent - never a singular
-        ``usage.model``/``usage.provider``. A turn is counted once; its models and providers each join
-        the distinct sets (so ``varied`` is exact), and the ``per_call`` breakdown pairs them
-        positionally, which is exact for the common case of one model and one provider throughout the
-        turn and best-effort otherwise, since the wire format does not preserve the true per-call
-        pairing.
+        ``usage.model``/``usage.provider``, and a shape that carries neither key is not this protocol
+        at all, so it is ignored rather than counted (there is no evidence a call was even made). A
+        turn that does carry the plural shape is always counted once, even when both lists come back
+        empty: its models and providers each join the distinct sets (so ``varied`` is exact), and the
+        ``per_call`` breakdown pairs them positionally, which is exact for the common case of one
+        model and one provider throughout the turn and best-effort otherwise, since the wire format
+        does not preserve the true per-call pairing.
         """
         if not isinstance(usage, Mapping):
             return
+        if "models" not in usage and "providers" not in usage:
+            return
         models = [m for m in usage.get("models") or () if isinstance(m, str) and m]
         providers = [p for p in usage.get("providers") or () if isinstance(p, str) and p]
-        if not models and not providers:
-            return
         self.calls[component] += 1
         for model in models:
             self.models[component].add(model)
         for provider in providers:
             self.providers[component].add(provider)
+        if not models and not providers:
+            self.unknown[component] += 1
         left, right = models or [""], providers or [""]
         for index in range(max(len(left), len(right))):
             model = left[index] if index < len(left) else ""
             provider = right[index] if index < len(right) else ""
             self.pairs[component][(model, provider)] += 1
 
+    def has_unknown_attribution(self) -> bool:
+        """Whether any component recorded a call whose response carried no model or provider."""
+        return any(count > 0 for count in self.unknown.values())
+
     def to_json(self) -> dict[str, Any]:
-        components = sorted(set(self.calls) | set(self.models) | set(self.providers))
+        components = sorted(set(self.calls) | set(self.models) | set(self.providers) | set(self.unknown))
         out: dict[str, Any] = {}
         for name in components:
             models = sorted(self.models.get(name, set()))
@@ -156,6 +177,7 @@ class CallRecorder:
                 "models_returned": models,
                 "providers": providers,
                 "varied": len(models) > 1 or len(providers) > 1,
+                "unknown_attribution_calls": self.unknown.get(name, 0),
                 "per_call": [
                     {"model": model or None, "provider": provider or None, "calls": count}
                     for (model, provider), count in sorted(self.pairs.get(name, {}).items())
@@ -242,6 +264,7 @@ def build_manifest(
         "models": dict(models),
         "temperatures": dict(temperatures),
         "llm_calls": calls.to_json(),
+        "llm_attribution_incomplete": calls.has_unknown_attribution(),
         "spend": {name: _spend([value]) for name, value in spend.items()},
         "status": status,
         "status_detail": status_detail,

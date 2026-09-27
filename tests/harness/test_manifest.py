@@ -89,35 +89,54 @@ def test_call_recorder_flags_variation() -> None:
     # (booking_truth.agent.loop.Usage.to_json: "models"/"providers", plural, already deduplicated),
     # never a singular "model"/"provider" - that shape is asserted in tests/agent/test_api.py.
     calls.record_usage("agent:guarded", {"models": ["vendor/a-2026"], "providers": ["p1"], "usd": 0.1})
+    # A real turn whose reply carried usage but no attribution at all (for example a cache hit that
+    # OpenRouter reports with neither a model nor a provider) is still a call: it must be counted, not
+    # silently dropped, and land in an explicit "unknown" bucket rather than vanish from the total.
     calls.record_usage("agent:guarded", {"models": [], "providers": [], "usd": 0.1})
     calls.record_usage("agent:naive", None)
     assert calls.to_json() == {
         "agent:guarded": {
-            "calls": 1,
+            "calls": 2,
             "models_returned": ["vendor/a-2026"],
             "providers": ["p1"],
             "varied": False,
-            "per_call": [{"model": "vendor/a-2026", "provider": "p1", "calls": 1}],
+            "unknown_attribution_calls": 1,
+            "per_call": [
+                {"model": None, "provider": None, "calls": 1},
+                {"model": "vendor/a-2026", "provider": "p1", "calls": 1},
+            ],
         },
         "persona": {
             "calls": 2,
             "models_returned": ["vendor/a-2026"],
             "providers": ["p1", "p2"],
             "varied": True,
+            "unknown_attribution_calls": 0,
             "per_call": [
                 {"model": "vendor/a-2026", "provider": "p1", "calls": 1},
                 {"model": "vendor/a-2026", "provider": "p2", "calls": 1},
             ],
         },
     }
+    assert calls.has_unknown_attribution() is True
 
 
 def test_call_recorder_reads_plural_agent_usage_not_a_singular_field() -> None:
     """A turn's usage never carries a bare ``model``/``provider`` key; that shape must be ignored,
-    not silently misread as if it were ``models``/``providers``."""
+    not silently misread as if it were ``models``/``providers`` (and never counted as an unknown-
+    attribution call: there is no evidence here that a call was even made in the expected shape)."""
     calls = CallRecorder()
     calls.record_usage("agent:guarded", {"model": "vendor/a-2026", "provider": "p1", "usd": 0.1})
     assert calls.to_json() == {}
+    assert calls.has_unknown_attribution() is False
+
+
+def test_call_recorder_has_unknown_attribution_is_false_with_full_attribution() -> None:
+    calls = CallRecorder()
+    calls.record("persona", model="vendor/a-2026", provider="p1")
+    calls.record_usage("agent:guarded", {"models": ["vendor/a-2026"], "providers": ["p1"], "usd": 0.1})
+    assert calls.has_unknown_attribution() is False
+    assert calls.to_json()["agent:guarded"]["unknown_attribution_calls"] == 0
 
 
 def test_call_recorder_pairs_mixed_length_agent_usage_positionally() -> None:
@@ -163,6 +182,41 @@ def test_the_manifest_is_redacted() -> None:
     assert manifest["command"] == "booking-truth test --suite ~/suite"
     assert manifest["spend"] == {"total_usd": 0.123457}
     assert manifest["agents"][0]["agent_version"] is None
+    assert manifest["llm_attribution_incomplete"] is False
+
+
+def _manifest_with(calls: CallRecorder) -> dict[str, Any]:
+    return build_manifest(
+        run_id="r",
+        date="2026-10-01",
+        as_of="2026-10-01",
+        hardware="MacBook Air M5, 24 GB",
+        suite="bundled",
+        suite_digest="sha256:00",
+        scenarios=["happy-book-host-zone"],
+        k=1,
+        agents=[AgentManifest("guarded", "builtin", "guarded", "bundled", "builtin")],
+        grading={"mode": "offline"},
+        models={},
+        temperatures={},
+        calls=calls,
+        spend={"total_usd": 0.0},
+        status="complete",
+        status_detail=None,
+        options={},
+        command="booking-truth test",
+        dry_run=False,
+        git={"sha": "unknown", "dirty": None},
+    )
+
+
+def test_the_manifest_flags_a_run_with_unknown_attribution() -> None:
+    calls = CallRecorder()
+    calls.record_usage("agent:guarded", {"models": [], "providers": [], "usd": 0.1})
+    manifest = _manifest_with(calls)
+    assert manifest["llm_attribution_incomplete"] is True
+    assert manifest["llm_calls"]["agent:guarded"]["calls"] == 1
+    assert manifest["llm_calls"]["agent:guarded"]["unknown_attribution_calls"] == 1
 
 
 # Builtin ------------------------------------------------------------------------------------------------
