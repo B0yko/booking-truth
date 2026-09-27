@@ -18,6 +18,14 @@ the score does not depend on how the resolver happens to implement equivalence.
 This is the one module in ``harness/`` that imports ``booking_truth.agent.guards`` (the deterministic
 resolver under test): it evaluates that guard rather than reusing it to grade a trial, so it is not the
 circularity ``docs/adr/0008`` guards against (see ``tests/harness/test_harness_independence.py``).
+
+A single malformed or truncated LLM-side answer does not stop the eval: the item is retried once at
+double the token budget (as the persona and the belief extractor do), and if it still fails, that one
+item is recorded as an error and the eval moves on to the next one, rather than abandoning every
+remaining item as before. Any other kind of LLM error (a budget stop, an auth or connection failure) still
+ends the LLM side for the rest of the run, since those are not per-item problems. ``TzEvalResult`` reports
+how many items were attempted, how many scored and the errors, alongside ``llm_skipped_reason`` for a
+full stop.
 """
 
 from __future__ import annotations
@@ -33,7 +41,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from booking_truth.agent.guards.tz.resolver import Resolution, TimezoneResolver
 from booking_truth.harness.report import table
-from booking_truth.llm.types import LLM, BudgetExceeded, ChatMessage, LLMError
+from booking_truth.llm.types import (
+    LLM,
+    BudgetExceeded,
+    ChatMessage,
+    LLMError,
+    LLMResponse,
+    content_looks_truncated,
+)
 from booking_truth.resources import data_path
 
 Status = Literal["resolved", "ambiguous", "unknown"]
@@ -186,16 +201,30 @@ def _parse(content: str | None) -> Resolution:
     )
 
 
-async def llm_resolve(llm: LLM, model: str, text: str) -> Resolution:
-    response = await llm.chat(
+async def _chat(llm: LLM, model: str, text: str, max_tokens: int) -> LLMResponse:
+    return await llm.chat(
         messages=[ChatMessage.system(PROMPT), ChatMessage.user(text)],
         temperature=EVAL_TEMPERATURE,
         model=model,
-        max_tokens=EVAL_MAX_TOKENS,
+        max_tokens=max_tokens,
         response_format=_SCHEMA,
         component="eval_tz",
     )
-    return _parse(response.content)
+
+
+async def llm_resolve(llm: LLM, model: str, text: str) -> Resolution:
+    """One item's LLM-only resolution. A response that looks cut off by the token budget is retried once,
+    at double the budget, before ``_parse`` gets the final say (the same pattern the persona and the
+    belief extractor use): resending an identical request at temperature 0 would just fail again
+    identically, so only a wider budget is worth another attempt."""
+    response = await _chat(llm, model, text, EVAL_MAX_TOKENS)
+    try:
+        return _parse(response.content)
+    except LLMError as exc:
+        if exc.kind != "malformed" or not content_looks_truncated(response):
+            raise
+        response = await _chat(llm, model, text, EVAL_MAX_TOKENS * 2)
+        return _parse(response.content)
 
 
 # Aggregation and the report --------------------------------------------------------------------------------
@@ -235,6 +264,12 @@ class TzEvalResult:
     model: str | None
     items: list[ItemResult] = field(default_factory=list)
     llm_skipped_reason: str | None = None
+    #: How many items the LLM side attempted (whether or not each one scored); includes items that ended
+    #: in ``llm_errors`` below, so ``llm_attempted - llm_scored`` accounts for every one of them.
+    llm_attempted: int = 0
+    #: One entry per item whose LLM-only answer stayed malformed or truncated even after a retry at double
+    #: the token budget; that one item is skipped, and the eval continues with the next.
+    llm_errors: list[dict[str, str]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         deterministic = [item.deterministic for item in self.items]
@@ -251,6 +286,9 @@ class TzEvalResult:
             "n_items": len(self.items),
             "deterministic": _counts(deterministic),
             "llm": _counts(llm) if llm else None,
+            "llm_attempted": self.llm_attempted,
+            "llm_scored": len(llm),
+            "llm_errors": self.llm_errors,
             "llm_skipped_reason": self.llm_skipped_reason,
             "items": [item.to_json() for item in self.items],
         }
@@ -261,8 +299,11 @@ async def run_tz_eval(
 ) -> TzEvalResult:
     """Score the deterministic resolver, and the LLM (when ``llm`` is given), against every test item.
 
-    A live-call failure (a budget stop or any other model error) stops the LLM side for every remaining
-    item; the deterministic side always covers all of them. ``model`` names the model used (or requested).
+    A malformed or truncated LLM-only answer costs only that one item (recorded in ``llm_errors``, after
+    :func:`llm_resolve`'s own retry at double the token budget also fails), not the rest of the run. Any
+    other live-call failure (a budget stop, an auth or connection error) stops the LLM side for every
+    remaining item, since that is not a single item's problem. The deterministic side always covers every
+    item regardless. ``model`` names the model used (or requested).
     """
     items = load_test_items(dataset_path)
     resolver = TimezoneResolver()
@@ -279,6 +320,7 @@ async def run_tz_eval(
         llm_score: Category | None = None
         if active is not None:
             assert model is not None
+            result.llm_attempted += 1
             try:
                 answer = await llm_resolve(active, model, item.text)
                 llm_score = score(
@@ -291,8 +333,11 @@ async def run_tz_eval(
                 result.llm_skipped_reason = f"budget stop after {len(result.items)} item(s): {exc}"
                 active = None
             except LLMError as exc:
-                result.llm_skipped_reason = f"LLM error after {len(result.items)} item(s): {exc}"
-                active = None
+                if exc.kind == "malformed":
+                    result.llm_errors.append({"id": item.id, "error": str(exc)})
+                else:
+                    result.llm_skipped_reason = f"LLM error after {len(result.items)} item(s): {exc}"
+                    active = None
         result.items.append(ItemResult(item.id, item.text, item.status, det_score, llm_score))
     return result
 
@@ -336,16 +381,21 @@ def render_tz_eval_md(data: Mapping[str, Any]) -> str:
     lines += ["", "## Deterministic resolver", ""]
     lines += table(["Category", "Count", "Rate"], _side_rows(det))
     lines += ["", "## LLM-only resolution", ""]
-    if llm is None:
+    attempted, errors = data.get("llm_attempted") or 0, data.get("llm_errors") or []
+    if llm is None and not attempted:
         reason = data.get("llm_skipped_reason") or "no LLM key configured"
         lines.append(f"Not run: {reason}. Offline: only the deterministic resolver is scored.")
     else:
         lines += table(["Category", "Count", "Rate"], _side_rows(llm))
+        scored = llm["n"] if llm is not None else 0
+        lines += ["", f"Attempted {attempted}, scored {scored}, {len(errors)} error(s)."]
+        if errors:
+            lines += [f"- `{e['id']}`: {e['error']}" for e in errors]
         if data.get("llm_skipped_reason"):
             lines += [
                 "",
                 f"Stopped early: {data['llm_skipped_reason']}. The table above covers only the "
-                f"{llm['n']} item(s) scored before that.",
+                f"{scored} item(s) scored before that.",
             ]
     lines += [
         "",

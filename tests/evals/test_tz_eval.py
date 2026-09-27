@@ -12,13 +12,14 @@ import pytest
 
 from booking_truth.agent.guards.tz.resolver import Resolution
 from booking_truth.evals.tz_eval import (
+    EVAL_MAX_TOKENS,
     load_test_items,
     render_tz_eval_md,
     run_tz_eval,
     score,
     zones_equivalent,
 )
-from booking_truth.llm.types import BudgetExceeded, ChatMessage, LLMResponse, ToolSpec, Usage
+from booking_truth.llm.types import BudgetExceeded, ChatMessage, LLMError, LLMResponse, ToolSpec, Usage
 
 
 def write_dataset(tmp_path: Path, rows: Sequence[dict[str, Any]]) -> Path:
@@ -51,14 +52,20 @@ ROWS = [
 
 
 class FakeLLM:
-    """A stand-in for :class:`~booking_truth.llm.types.LLM`; canned per-call responses, never a real model."""
+    """A stand-in for :class:`~booking_truth.llm.types.LLM`; canned per-call responses, never a real model.
+
+    An answer that is an :class:`Exception` is raised instead of answered; one that is already an
+    :class:`LLMResponse` (a malformed or truncated body a test builds directly) is returned as is."""
 
     def __init__(
-        self, answers: Sequence[dict[str, Any]] | None = None, error: Exception | None = None
+        self,
+        answers: Sequence[dict[str, Any] | Exception | LLMResponse] | None = None,
+        error: Exception | None = None,
     ) -> None:
         self.answers = list(answers or [])
         self.error = error
         self.calls: list[str] = []
+        self.max_tokens_seen: list[int] = []
 
     async def chat(
         self,
@@ -73,9 +80,14 @@ class FakeLLM:
         run_id: str | None = None,
     ) -> LLMResponse:
         self.calls.append(messages[-1].content or "")
+        self.max_tokens_seen.append(max_tokens)
         if self.error is not None:
             raise self.error
         payload = self.answers[len(self.calls) - 1]
+        if isinstance(payload, Exception):
+            raise payload
+        if isinstance(payload, LLMResponse):
+            return payload
         return LLMResponse(
             content=json.dumps(payload),
             tool_calls=[],
@@ -86,6 +98,21 @@ class FakeLLM:
             response_id="r1",
             latency_s=0.001,
         )
+
+
+def _raw(content: str, *, finish_reason: str | None = None) -> LLMResponse:
+    """A hand-built response to test the malformed/truncated path directly, without a real model."""
+    return LLMResponse(
+        content=content,
+        tool_calls=[],
+        usage=Usage(prompt_tokens=10, completion_tokens=5, usd=0.0001),
+        model_requested="fake",
+        model_returned="fake",
+        provider=None,
+        response_id="r1",
+        latency_s=0.001,
+        finish_reason=finish_reason,
+    )
 
 
 def test_load_test_items_keeps_only_the_test_split_sorted_by_id(tmp_path: Path) -> None:
@@ -204,6 +231,70 @@ async def test_a_budget_stop_ends_the_llm_side_but_keeps_the_deterministic_resul
     assert "budget stop" in (data["llm_skipped_reason"] or "")
     assert data["deterministic"]["n"] == 3  # the deterministic side still covers every item
     assert len(llm.calls) == 1  # no further live calls after the first failure
+
+
+async def test_a_truncated_item_is_retried_at_double_the_budget_and_recovers(tmp_path: Path) -> None:
+    """Sorted item order is a-1, a-2, a-3; a-1's first answer looks cut off by the token budget."""
+    llm = FakeLLM(
+        [
+            _raw(
+                '{"status": "ambiguous", "zone": null, "candidates": ["Asia/Kolkata"',
+                finish_reason="length",
+            ),
+            {"status": "ambiguous", "zone": None, "candidates": ["Asia/Kolkata", "Europe/Dublin"]},
+            {"status": "resolved", "zone": "Europe/Berlin", "candidates": []},
+            {"status": "unknown", "zone": None, "candidates": []},
+        ]
+    )
+    result = await run_tz_eval(llm=llm, model="fake/model", dataset_path=write_dataset(tmp_path, ROWS))
+    data = result.to_json()
+    assert data["llm"]["n"] == 3
+    assert data["llm_attempted"] == 3
+    assert data["llm_scored"] == 3
+    assert data["llm_errors"] == []
+    assert data["llm_skipped_reason"] is None
+    assert len(llm.calls) == 4  # a-1's retry, then a-2 and a-3 each answered on the first try
+    assert llm.max_tokens_seen[:2] == [EVAL_MAX_TOKENS, EVAL_MAX_TOKENS * 2]
+
+
+async def test_a_malformed_item_is_recorded_as_an_error_and_the_eval_continues(tmp_path: Path) -> None:
+    """Run-2 anomaly: a single malformed/truncated answer ("Unterminated string...") stopped the LLM side
+    5 items early. It must now cost only that one item, with the rest still scored."""
+    bad = _raw('{"status": "resolved", "zone": "Europe/Berlin"')  # invalid JSON, looks cut off either way
+    llm = FakeLLM(
+        [
+            {"status": "ambiguous", "zone": None, "candidates": ["Asia/Kolkata", "Europe/Dublin"]},  # a-1
+            bad,  # a-2, first attempt
+            bad,  # a-2, retry - still malformed
+            {"status": "unknown", "zone": None, "candidates": []},  # a-3
+        ]
+    )
+    result = await run_tz_eval(llm=llm, model="fake/model", dataset_path=write_dataset(tmp_path, ROWS))
+    data = result.to_json()
+    assert data["llm"]["n"] == 2  # a-1 and a-3 scored; a-2 errored
+    assert data["llm_attempted"] == 3
+    assert data["llm_scored"] == 2
+    assert [e["id"] for e in data["llm_errors"]] == ["a-2"]
+    assert data["llm_skipped_reason"] is None  # the eval did not stop
+    assert len(llm.calls) == 4  # a-1, a-2 x2 (its own retry), a-3
+    assert [item["id"] for item in data["items"] if item["llm"] is None] == ["a-2"]
+
+
+async def test_a_non_malformed_llm_error_still_stops_the_rest_of_the_run(tmp_path: Path) -> None:
+    """Only a malformed/truncated answer is a per-item problem; any other kind (here, an upstream 5xx)
+    still ends the LLM side for every remaining item, as before this fix."""
+    llm = FakeLLM(
+        [
+            {"status": "ambiguous", "zone": None, "candidates": ["Asia/Kolkata", "Europe/Dublin"]},
+            LLMError("upstream is down", kind="server"),
+        ]
+    )
+    result = await run_tz_eval(llm=llm, model="fake/model", dataset_path=write_dataset(tmp_path, ROWS))
+    data = result.to_json()
+    assert data["llm"]["n"] == 1
+    assert data["llm_errors"] == []
+    assert "LLM error after 1 item(s)" in (data["llm_skipped_reason"] or "")
+    assert len(llm.calls) == 2
 
 
 def test_render_tz_eval_md_shows_the_headline_category(tmp_path: Path) -> None:

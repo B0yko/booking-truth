@@ -74,9 +74,10 @@ def write_dataset(tmp_path: Path, rows: Sequence[dict[str, Any]]) -> Path:
 
 class FakeLLM:
     """A stand-in for :class:`~booking_truth.llm.types.LLM`; canned per-call responses, never a real model.
-    An entry that is an exception instance is raised instead of answered."""
+    An entry that is an exception instance is raised instead of answered; one that is already an
+    :class:`LLMResponse` (a malformed or truncated body a test builds directly) is returned as is."""
 
-    def __init__(self, answers: Sequence[dict[str, Any] | Exception]) -> None:
+    def __init__(self, answers: Sequence[dict[str, Any] | Exception | LLMResponse]) -> None:
         self.answers = list(answers)
         self.calls = 0
 
@@ -96,6 +97,8 @@ class FakeLLM:
         self.calls += 1
         if isinstance(payload, Exception):
             raise payload
+        if isinstance(payload, LLMResponse):
+            return payload
         return LLMResponse(
             content=json.dumps(payload),
             tool_calls=[],
@@ -106,6 +109,21 @@ class FakeLLM:
             response_id="r1",
             latency_s=0.001,
         )
+
+
+def _raw(content: str, *, finish_reason: str | None = None) -> LLMResponse:
+    """A hand-built response to test the malformed/truncated path directly, without a real model."""
+    return LLMResponse(
+        content=content,
+        tool_calls=[],
+        usage=Usage(prompt_tokens=10, completion_tokens=5, usd=0.0002),
+        model_requested="fake",
+        model_returned="fake",
+        provider=None,
+        response_id="r1",
+        latency_s=0.001,
+        finish_reason=finish_reason,
+    )
 
 
 def test_load_test_items_keeps_only_the_test_split_sorted_by_id(tmp_path: Path) -> None:
@@ -185,6 +203,31 @@ async def test_an_llm_failure_on_the_first_item_reports_llm_as_not_run(tmp_path:
     data = result.to_json()
     assert data["llm"] is None
     assert "LLM error after 0 item(s)" in (data["llm_skipped_reason"] or "")
+
+
+async def test_a_malformed_item_is_recorded_as_an_error_and_the_eval_continues(tmp_path: Path) -> None:
+    """Sorted item order is be-1, be-2, be-3; be-2's answer stays malformed even after
+    ``LLMExtractor.extract``'s own retry at double the token budget. That one item is skipped, not the
+    whole run: run-2's ``eval tz`` anomaly (a single malformed answer stopping 5 remaining items) applies
+    here too."""
+    bad = _raw('{"status": "not_booked"')  # invalid JSON, looks cut off either way
+    llm = FakeLLM(
+        [
+            {"status": "not_booked", "time": None, "offered": [], "evidence": ""},  # be-1
+            bad,  # be-2, first attempt
+            bad,  # be-2, retry - still malformed
+            {"status": "not_booked", "time": None, "offered": [], "evidence": "couldn't book"},  # be-3
+        ]
+    )
+    result = await run_extractor_eval(llm=llm, model="fake/model", dataset_path=write_dataset(tmp_path, ROWS))
+    data = result.to_json()
+    assert data["llm"]["n"] == 2  # be-1 and be-3 scored; be-2 errored
+    assert data["llm_attempted"] == 3
+    assert data["llm_scored"] == 2
+    assert [e["id"] for e in data["llm_errors"]] == ["be-2"]
+    assert data["llm_skipped_reason"] is None  # the eval did not stop
+    assert llm.calls == 4  # be-1, be-2 x2 (its own retry), be-3
+    assert [item["id"] for item in data["items"] if item["llm_status"] is None] == ["be-2"]
 
 
 async def test_benchmark_agreement_is_read_from_a_runs_summary_json(tmp_path: Path) -> None:

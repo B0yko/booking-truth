@@ -18,6 +18,12 @@ agent mode, and lists every naive ``false_success`` trial where the two disagree
 about most, since a guarded confirmation is code-rendered and easier to parse than free prose.
 
 This module touches only the harness's own two extractors, never ``booking_truth.agent.guards``.
+
+A single malformed or truncated LLM answer does not stop the eval: ``LLMExtractor.extract`` already
+retries once at double the token budget, and if it still fails, that one item is recorded as an error
+(``ExtractorEvalResult.llm_errors``) and the eval moves on to the next item, rather than abandoning every
+remaining one as before. Any other kind of LLM error (a budget stop, an auth or connection failure) still
+ends the LLM side for the rest of the run.
 """
 
 from __future__ import annotations
@@ -141,6 +147,13 @@ class ExtractorEvalResult:
     llm_skipped_reason: str | None = None
     items: list[ItemRecord] = field(default_factory=list)
     benchmark_run: dict[str, Any] | None = None
+    #: How many items the LLM side attempted (whether or not each one scored); includes items that ended
+    #: in ``llm_errors`` below, so ``llm_attempted - llm_scored`` accounts for every one of them.
+    llm_attempted: int = 0
+    #: One entry per item whose LLM extraction stayed malformed or truncated even after
+    #: ``LLMExtractor.extract``'s own retry at double the token budget; that one item is skipped, and the
+    #: eval continues with the next.
+    llm_errors: list[dict[str, str]] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -151,6 +164,9 @@ class ExtractorEvalResult:
             "n_items": self.lexicon.n,
             "lexicon": self.lexicon.to_json(),
             "llm": self.llm.to_json() if self.llm is not None and self.llm.n else None,
+            "llm_attempted": self.llm_attempted,
+            "llm_scored": self.llm.n if self.llm is not None else 0,
+            "llm_errors": self.llm_errors,
             "llm_skipped_reason": self.llm_skipped_reason,
             "items": [item.to_json() for item in self.items],
             "benchmark_agreement": self.benchmark_run,
@@ -165,7 +181,13 @@ async def run_extractor_eval(
     benchmark_run_dir: Path | str | None = None,
 ) -> ExtractorEvalResult:
     """Score both extractors against every test item; ``benchmark_run_dir`` adds agreement stats from a
-    prior ``booking-truth test`` run's ``summary.json``."""
+    prior ``booking-truth test`` run's ``summary.json``.
+
+    A malformed or truncated LLM answer costs only that one item (recorded in ``llm_errors``, after
+    ``LLMExtractor.extract``'s own retry at double the token budget also fails), not the rest of the run.
+    Any other live-call failure (a budget stop, an auth or connection error) still stops the LLM side for
+    every remaining item, since that is not a single item's problem.
+    """
     items = load_test_items(dataset_path)
     result = ExtractorEvalResult(model=model)
     if llm is not None:
@@ -182,6 +204,7 @@ async def run_extractor_eval(
         llm_status: str | None = None
         if active is not None:
             assert model is not None
+            result.llm_attempted += 1
             extractor = LLMExtractor(active, model=model)
             try:
                 llm_belief = await extractor.extract(
@@ -199,8 +222,11 @@ async def run_extractor_eval(
                 result.llm_skipped_reason = f"budget stop after {result.lexicon.n - 1} item(s): {exc}"
                 active = None
             except LLMError as exc:
-                result.llm_skipped_reason = f"LLM error after {result.lexicon.n - 1} item(s): {exc}"
-                active = None
+                if exc.kind == "malformed":
+                    result.llm_errors.append({"id": item.id, "error": str(exc)})
+                else:
+                    result.llm_skipped_reason = f"LLM error after {result.lexicon.n - 1} item(s): {exc}"
+                    active = None
         result.items.append(ItemRecord(item.id, item.gold_status, lexicon_belief.status, llm_status))
     if benchmark_run_dir is not None:
         result.benchmark_run = _benchmark_agreement(Path(benchmark_run_dir))
@@ -262,15 +288,21 @@ def render_extractor_eval_md(data: Mapping[str, Any]) -> str:
             _score_row("LLM", data["llm"]),
         ],
     )
-    if data["llm"] is None:
+    attempted, errors = data.get("llm_attempted") or 0, data.get("llm_errors") or []
+    if data["llm"] is None and not attempted:
         reason = data.get("llm_skipped_reason") or "no LLM key configured"
         lines += ["", f"LLM extractor not run: {reason}. Offline: only the lexicon extractor is scored."]
-    elif data.get("llm_skipped_reason"):
-        lines += [
-            "",
-            f"LLM extractor stopped early: {data['llm_skipped_reason']}. The row above covers only the "
-            f"{data['llm']['n']} item(s) scored before that.",
-        ]
+    else:
+        scored = data["llm"]["n"] if data["llm"] is not None else 0
+        lines += ["", f"LLM extractor: attempted {attempted}, scored {scored}, {len(errors)} error(s)."]
+        if errors:
+            lines += [f"- `{e['id']}`: {e['error']}" for e in errors]
+        if data.get("llm_skipped_reason"):
+            lines += [
+                "",
+                f"LLM extractor stopped early: {data['llm_skipped_reason']}. The row above covers only "
+                f"the {scored} item(s) scored before that.",
+            ]
     benchmark = data.get("benchmark_agreement")
     lines += ["", "## Agreement on benchmark trials", ""]
     if benchmark is None:
