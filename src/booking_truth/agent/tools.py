@@ -661,6 +661,10 @@ class ToolExecutor:
         chosen = spread_slots(slots, zone, limit) if self.mode == "guarded" else slots[:limit]
         list_id = uuid.uuid4().hex
         secret = self.deps.settings.session_secret.get_secret_value()
+        # If this turn already looked the lead's bookings up before offering these, the whole list is a
+        # reschedule offer for that booking: stored (never returned to the model) so a later turn's
+        # ``book_slot`` on one of these ids knows it too, even without a fresh ``list_my_bookings`` call.
+        reschedule_ref = self.state.listed_booking_ref
         stored = []
         for slot in chosen:
             at = render.local(slot.start, zone)
@@ -672,6 +676,7 @@ class ToolExecutor:
                     "label": self._label(slot.start),
                     "local_date": at.date().isoformat(),
                     "local_time": at.strftime("%H:%M"),
+                    "reschedule_ref": reschedule_ref,
                 }
             )
         if stored:
@@ -949,7 +954,14 @@ class ToolExecutor:
         outcome, record, existing, _ = await self.create(start)
         if outcome == "already_booked" and existing is not None:
             changeable = self._allowed(existing.ref)
-            asked_to_move = changeable and self.state.listed_booking_ref == existing.ref
+            # ``listed_booking_ref`` covers a list_my_bookings call earlier in this same turn; the slot's
+            # own ``reschedule_ref`` (stamped when its list was offered, in ``_slot_result``) covers the
+            # far more common case, a pick on a *later* turn than the one that offered it, with no fresh
+            # list_my_bookings call in between (the run-1 pattern: offer turn, then a separate pick turn).
+            asked_to_move = changeable and existing.ref in {
+                self.state.listed_booking_ref,
+                slot.get("reschedule_ref"),
+            }
             if changeable and not asked_to_move:
                 self.state.reschedule_offer = {"booking_uid": existing.ref, "slot_id": slot_id}
             if asked_to_move:

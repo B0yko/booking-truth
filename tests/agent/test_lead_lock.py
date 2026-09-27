@@ -296,6 +296,31 @@ async def test_reschedule_quick_reply_moves_it_directly_with_no_book_slot_involv
     assert len(guarded.bookings()) == 1
 
 
+async def test_a_pick_on_a_later_turn_reschedules_without_a_fresh_list_my_bookings_call(
+    guarded: AgentEnv,
+) -> None:
+    """The run-1 pattern at the tool level, across two separate turns (two separate ``ToolExecutor``s, as
+    two separate HTTP turns get): the offer turn calls ``list_my_bookings`` then ``find_slots`` — tagging
+    the offered slots as a reschedule for that booking, stored with the slot list itself, not just this
+    turn's ephemeral state. A live model does not always repeat ``list_my_bookings`` on the turn it makes
+    the pick (it may already know the booking from the conversation history), so ``book_slot`` on one of
+    those slot ids, on a turn whose own state never saw ``list_my_bookings``, must still be told to
+    reschedule right away — never turned into a second reschedule offer."""
+    uid = guarded.setup_booking(MON_1000)
+    offer_tools = executor(guarded)
+    listed = await offer_tools.run("list_my_bookings", {})
+    assert listed["bookings"][0]["booking_uid"] == uid
+    slot = (await guarded_slots(offer_tools, date(2026, 10, 6), date(2026, 10, 6)))[0]
+
+    pick_tools = executor(guarded)  # a fresh turn: its own state never called list_my_bookings
+    result = await pick_tools.run("book_slot", {"slot_id": slot["slot_id"]})
+    assert result["booked"] is False
+    assert result["reason"] == "already_booked"
+    assert result["existing"]["booking_uid"] == uid
+    assert "reschedule_booking now" in result["instruction"]
+    assert pick_tools.state.reschedule_offer is None  # not turned into a second, redundant offer
+
+
 async def test_a_widget_session_is_not_offered_a_reschedule_it_cannot_make(guarded: AgentEnv) -> None:
     """The policy reads the calendar across every channel and session, so a booking made outside this
     widget session still turns a second booking into ``already_booked`` here too; but reschedule and
