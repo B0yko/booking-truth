@@ -105,6 +105,16 @@ def confirmation_follow_up(action: str) -> str:
     raise ValueError(f"unknown booking action {action!r}")
 
 
+def llm_unavailable_with_booking(start: datetime, zone: str, ref: str) -> str:
+    """The model-call-failed fallback when the lead has a verified active booking this session: it says the
+    booking is unchanged, code-rendered, instead of the generic template's "nothing has been booked", which
+    would read as a retraction of a booking that is still there."""
+    return (
+        f"Sorry, I can't answer right now. Your booking is unchanged: {long_label(start, zone)} · "
+        f"reference {reference(ref)}. Please try again in a few minutes."
+    )
+
+
 def zone_statement(zone: str, instant: datetime, *, browser: bool = False) -> str:
     """The statement-back line for a resolved or hinted zone."""
     source = " based on your browser" if browser else ""

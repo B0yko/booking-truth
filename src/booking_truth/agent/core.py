@@ -778,21 +778,27 @@ class AgentCore:
 
     # Model path ---------------------------------------------------------------------------------------------
 
+    def _active_bookings(self, ctx: TurnContext) -> list[LedgerEntry]:
+        """The lead's verified, live bookings (``claim_ledger``); on the ``widget`` channel, only this
+        session's own. Empty when the guard is off: without a ledger there is nothing to trust."""
+        if not self.on("claim_ledger"):
+            return []
+        current = self.store.claims.current_bookings(ctx.lead_email, self.deps.calendar.event_key)
+        if ctx.channel != "widget":
+            return current
+        refs = set(self.store.widget_bookings.refs(ctx.session_id))
+        return [entry for entry in current if entry.booking_ref in refs]
+
     def context_block(self, ctx: TurnContext) -> dict[str, Any]:
         local = ctx.now.astimezone(ZoneInfo(ctx.zone))
-        active: list[dict[str, str]] = []
-        if self.on("claim_ledger"):
-            refs = set(self.store.widget_bookings.refs(ctx.session_id)) if ctx.channel == "widget" else None
-            for entry in self.store.claims.current_bookings(ctx.lead_email, self.deps.calendar.event_key):
-                if refs is not None and entry.booking_ref not in refs:
-                    continue
-                active.append(
-                    {
-                        "booking_uid": entry.booking_ref,
-                        "label": render.slot_label(entry.start_utc, ctx.zone, now=ctx.now),
-                        "start_utc": iso_z(entry.start_utc),
-                    }
-                )
+        active = [
+            {
+                "booking_uid": entry.booking_ref,
+                "label": render.slot_label(entry.start_utc, ctx.zone, now=ctx.now),
+                "start_utc": iso_z(entry.start_utc),
+            }
+            for entry in self._active_bookings(ctx)
+        ]
         return {
             "today": local.date().isoformat(),
             "weekday": local.strftime("%A"),
@@ -819,7 +825,7 @@ class AgentCore:
             )
         except LLMError as exc:
             executor.state.event("agent", "llm_error", f"{exc.kind}: {exc}")
-            reply = self._describe_writes(executor.ctx) or render.LLM_UNAVAILABLE
+            reply = self._llm_error_reply(executor.ctx)
             return TurnResult(reply=reply, messages=[user, ChatMessage.assistant(reply)], user_text=text)
         if loop.answer is None:
             reply = self._describe_writes(executor.ctx) or render.TOOL_LOOP_EXHAUSTED
@@ -851,6 +857,21 @@ class AgentCore:
         if not ctx.state.writes:
             return None
         return self._write_reply(ctx, ctx.state.writes[-1])
+
+    def _llm_error_reply(self, ctx: TurnContext) -> str:
+        """The reply when the model call itself failed (``LLMError``), session-aware so a transient
+        provider error never reads as a retraction: a write verified earlier in this very turn speaks for
+        itself (``_describe_writes``); failing that, with ``claim_ledger`` a booking already on the books
+        this session is reported as unchanged, code-rendered from the ledger, never as "nothing has been
+        booked"; only with neither does the generic fallback stand."""
+        described = self._describe_writes(ctx)
+        if described is not None:
+            return described
+        active = self._active_bookings(ctx)
+        if active:
+            entry = active[-1]
+            return render.llm_unavailable_with_booking(entry.start_utc, ctx.zone, entry.booking_ref)
+        return render.LLM_UNAVAILABLE
 
     def _write_reply(self, ctx: TurnContext, write: WriteRecord) -> str:
         """The code-rendered reply about a write of this turn. When the write's confirmation line is rendered

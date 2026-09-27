@@ -12,6 +12,7 @@ from agent_env import API_KEY, LEAD, NOW, AgentEnv, make_env
 from fastapi import FastAPI
 
 from booking_truth.agent.core import AgentCore
+from booking_truth.agent.scripted import FakeLLM
 from booking_truth.agent.tools import TurnContext
 from booking_truth.crm import NullCrm
 from booking_truth.llm.types import ChatMessage, LLMError, LLMResponse, ToolSpec, Usage
@@ -294,6 +295,63 @@ async def test_a_model_failure_gets_an_honest_reply(sandbox: Sandbox, tmp_path: 
         assert "Nothing has been booked or changed" in data["reply"]
         assert [(e["guard"], e["event"]) for e in data["guard"]["events"]] == [("agent", "llm_error")]
         assert env.bookings() == []
+
+
+class FlakyOnCue:
+    """``FakeLLM`` that raises ``LLMError`` instead of answering on a turn whose own message contains
+    ``cue``, otherwise behaves exactly like the scripted policy: an injected upstream error on one turn,
+    unrelated to a booking made earlier in the same session."""
+
+    def __init__(self, cue: str) -> None:
+        self.cue = cue
+        self.inner = FakeLLM()
+
+    async def chat(
+        self,
+        *,
+        messages: Sequence[ChatMessage],
+        tools: Sequence[ToolSpec] | None = None,
+        temperature: float,
+        model: str | None = None,
+        max_tokens: int = 1024,
+        response_format: dict[str, Any] | None = None,
+        component: str = "agent",
+        run_id: str | None = None,
+    ) -> LLMResponse:
+        if messages and messages[-1].role == "user" and self.cue in (messages[-1].content or ""):
+            raise LLMError("rate limit", kind="rate_limit")
+        return await self.inner.chat(
+            messages=messages,
+            tools=tools,
+            temperature=temperature,
+            model=model,
+            max_tokens=max_tokens,
+            response_format=response_format,
+            component=component,
+            run_id=run_id,
+        )
+
+
+async def test_llm_error_on_a_later_turn_reports_the_booking_as_unchanged(
+    sandbox: Sandbox, tmp_path: Path
+) -> None:
+    """Run-1 pattern: a booking is made and confirmed, then a later, unrelated turn ("Great, thanks.") hits
+    an upstream LLM error. The fallback must not claim "nothing has been booked" when something is — with
+    ``claim_ledger`` it reports the session's own verified booking as unchanged, code-rendered from the
+    ledger, not the generic template."""
+    async for env in make_env(sandbox, tmp_path, llm=FlakyOnCue("Great, thanks")):
+        offer = await env.say("I'd like to book an intro call next week.")
+        picked = offer["reply"].split("\n")[1].removeprefix("- ")
+        booked = await env.say(f"{picked} works for me.")
+        assert booked["booking"]["action"] == "booked"
+        ref = booked["booking"]["ref"]
+
+        failed = await env.say("Great, thanks, see you then.")
+        assert "Nothing has been booked" not in failed["reply"]
+        assert "unchanged" in failed["reply"]
+        assert ref[:8] in failed["reply"]
+        assert ("agent", "llm_error") in [(e["guard"], e["event"]) for e in failed["guard"]["events"]]
+        assert len(env.bookings()) == 1  # the booking itself is of course untouched
 
 
 async def test_a_plain_text_answer_is_the_reply(sandbox: Sandbox, tmp_path: Path) -> None:
