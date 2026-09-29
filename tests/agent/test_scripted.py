@@ -267,6 +267,40 @@ async def test_naive_booking_uses_utc_dates_and_the_offered_iso_time() -> None:
     assert booked["claims"][0]["type"] == "booked"
 
 
+async def test_naive_lookup_offers_only_the_local_dates_it_asked_for() -> None:
+    # Berlin's range starts on Friday 2 October, which is Thursday 22:00 UTC: the UTC-dated lookup also
+    # returns Thursday's slots, but those are today and were not asked for.
+    talk = naive_talk(
+        resolve_timezone=[{"zone": "Europe/Berlin", "utc_offset": "UTC+02:00"}],
+        find_slots=[naive_list([date(2026, 10, 1), date(2026, 10, 5)], [(10, 0)])],
+    )
+    offer = await talk.say("Hi, I'm in Berlin. Can I book a call?")
+    assert talk.calls[1] == ("find_slots", {"from_date": "2026-10-01", "to_date": "2026-10-08"})
+    assert [c["time"] for c in offer["claims"]] == ["Monday 5 October, 4:00 PM"]
+
+
+async def test_naive_offers_follow_the_range_of_the_lookup_after_a_failed_one() -> None:
+    # A failed lookup and its retry come back empty, so the next lookup is one range later; the slots it
+    # returns are offered even though the earlier lookups were three.
+    seen: list[dict[str, Any]] = []
+
+    def find_slots(args: dict[str, Any]) -> Any:
+        seen.append(args)
+        if len(seen) == 1:
+            return "Error: calendar returned HTTP 500: boom"
+        if len(seen) == 2:
+            return naive_list([], [])
+        return naive_list([date.fromisoformat(args["from_date"]) + timedelta(days=4)], [(10, 0)])
+
+    talk = naive_talk(
+        resolve_timezone=[{"zone": "Europe/Berlin", "utc_offset": "UTC+02:00"}], find_slots=find_slots
+    )
+    offer = await talk.say("Hi, I'm in Berlin. Can I book a call?")
+    assert seen[2]["from_date"] == "2026-10-08"
+    assert len(offer["claims"]) == 1
+    assert "Monday 12 October" in offer["claims"][0]["time"]
+
+
 async def test_without_a_part_of_day_the_first_four_are_offered() -> None:
     talk = guarded_talk(find_slots=[guarded_slot_list(NY, WEEK, HOURS)])
     offer = await talk.say("Can I book an intro call?")

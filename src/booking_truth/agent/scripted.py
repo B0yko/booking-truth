@@ -749,6 +749,14 @@ class _Run:
             utc_last = utc_first + timedelta(days=RANGE_LIMIT_DAYS - 1)
         return {"from_date": utc_first.isoformat(), "to_date": utc_last.isoformat()}
 
+    def shift_of(self, args: dict[str, Any], first: date, last: date, span: int) -> int:
+        """How many days the lookup with these arguments lies after the first range asked for."""
+        for days in range(span * (MAX_EXTENSIONS + 1) + 1):
+            shift = timedelta(days=days)
+            if self.find_args(first + shift, last + shift) == args:
+                return days
+        return 0
+
     def matching(self, offers: list[Offer], prefs: Prefs) -> list[Offer]:
         wanted = set(prefs.dates) if prefs.dates else None
         found = []
@@ -777,10 +785,15 @@ class _Run:
                 return call("find_slots", **latest.args)
             return self.plan_unavailable(prefs)
         offers = self.slots_of(latest.result)
+        span = (last - first).days + 1
+        shift = timedelta(days=self.shift_of(latest.args, first, last, span))
+        if not self.guarded:
+            # A lookup keyed by UTC dates reaches into the neighbouring local days: only the slots on the
+            # local dates of this lookup's range are offered.
+            offers = [o for o in offers if first + shift <= self.local(o.start).date() <= last + shift]
         if not offers:
             if len(lookups) <= MAX_EXTENSIONS:
-                span = (last - first).days + 1
-                shift = timedelta(days=span * len(lookups))
+                shift += timedelta(days=span)
                 return call("find_slots", **self.find_args(first + shift, last + shift))
             return final(render.no_slots_text(self.zone))
         chosen = self.matching(offers, prefs)
