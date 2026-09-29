@@ -136,8 +136,8 @@ class RegionRow:
     code: str = ""
 
 
-#: The three countries whose first-level regions get their own resolution step (design-agent.md SS4 /
-#: the product spec, item 4: region names belong before cities). Data-derived, not hand-picked: every
+#: The three countries whose first-level regions get their own resolution step (a region name is tried
+#: before city names). Data-derived, not hand-picked: every
 #: region here comes straight out of ``cities_tz.csv``'s own ``admin1_name`` column.
 _REGION_COUNTRIES = frozenset({"US", "CA", "AU"})
 #: The same population floor the region rule uses to decide which cities count towards a region's zones

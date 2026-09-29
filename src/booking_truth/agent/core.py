@@ -349,7 +349,7 @@ class AgentCore:
 
     def _hook_tz_prescan(self, text: str, ctx: TurnContext) -> str | None:
         """Hook for ``tz_resolver``: resolve a zone the prospect states in ``text`` before the model
-        runs (design-agent.md SSB.5). A resolved statement updates the lead's zone (source ``stated``)
+        runs. A resolved statement updates the lead's zone (source ``stated``)
         and is returned to state back; an ambiguous one offers ``confirm_timezone`` quick replies
         (``ctx.state.tz_candidates``, rendered by :meth:`_quick_replies`) and states nothing back yet,
         so the model's own ``resolve_timezone`` call still asks the question. With no statement in
@@ -556,8 +556,9 @@ class AgentCore:
 
     async def _hook_crm_outbox(self, ctx: TurnContext) -> None:
         """Hook for ``crm_outbox``: queue a validated CRM payload for each write of the turn that the
-        calendar confirmed, never from the model's reply text. The HubSpot adapter and the worker that
-        drains this queue land in a later milestone; this hook only writes the outbox row.
+        calendar confirmed, never from the model's reply text. The outbox worker
+        (:mod:`booking_truth.agent.outbox_worker`) delivers the queue to HubSpot; this hook only writes the
+        outbox row.
 
         Independent of ``claim_ledger`` (``agent.guards.REQUIRES`` ties only ``rendered_confirmation`` to
         it): a ``verified`` write's fields come from its read-back ledger entry, and a ``trusted`` write
@@ -566,7 +567,7 @@ class AgentCore:
         skipped: nothing reaches the CRM through this hook without a calendar-confirmed result. The
         payload is validated again by :meth:`~booking_truth.store.repos.OutboxRepo.enqueue`, so a bad one
         is refused rather than queued; that should not happen from this data, and a guard event marks it
-        if it ever does. This runs after the turn's response is already built (design-agent.md SSB.12),
+        if it ever does. This runs after the turn's response is already built,
         so — like the naive rule's own CRM calls — each queued item gets its own trace step instead of a
         guard event on this turn's reply."""
         steps: list[dict[str, Any]] = []

@@ -1,6 +1,6 @@
 """``tz_resolver``: deterministic resolution of what a prospect says about their time zone.
 
-Resolution order (design-agent.md SS4/SSD; the product spec, item 4, gives the same order):
+Resolution order:
 
 1. an explicit IANA zone key ("Europe/Berlin", "Etc/GMT+3", "UTC"), taken as written;
 2. a fixed offset ("GMT+2", "UTC-5", "UTC+05:30"): a whole-hour offset maps to the ``Etc/GMT`` zone of
@@ -29,11 +29,11 @@ Resolution order (design-agent.md SS4/SSD; the product spec, item 4, gives the s
 Anything none of these six steps reaches is ``unknown``: never a silent fallback to any default zone.
 
 :meth:`TimezoneResolver.prescan` is the separate phrase detector ``AgentCore`` runs over the prospect's
-own message before the model sees it (design-agent.md SSB.5): it looks for a handful of ways people
+own message before the model sees it: it looks for a handful of ways people
 state where they are ("I'm in X", "we're on X", "X time", "calling from X") or a bare abbreviation,
 offset or IANA name, and resolves whatever it finds through the same six steps.
 
-:func:`local_instant` is the other half of the guard's time handling (design.md SS2): converting a
+:func:`local_instant` is the other half of the guard's time handling: converting a
 naive local wall-clock reading to UTC, rejecting one a DST gap skips over and flagging one a DST fold
 makes ambiguous, rather than silently picking an instant either way.
 """
@@ -315,8 +315,8 @@ def _equivalence_groups(zones: Sequence[str], now: datetime, horizon_days: int) 
     return list(groups.values())
 
 
-# Local time <-> UTC (design.md SS2: "nonexistent local time -> reject; ambiguous (fold) -> require
-# confirmation"). Every conversion elsewhere in this module goes the other way, UTC to local, which is
+# Local time <-> UTC: a nonexistent local time is rejected and an ambiguous (fold) one requires
+# confirmation. Every conversion elsewhere in this module goes the other way, UTC to local, which is
 # always well defined; this is the one place a naive local wall-clock time is turned into an instant. ---
 
 
@@ -657,7 +657,7 @@ class TimezoneResolver:
             return region
         return self._city(text, now, horizon_days)
 
-    # The pre-scan phrase detector (design-agent.md SSB.5) --------------------------------------------------
+    # The pre-scan phrase detector --------------------------------------------------
 
     def prescan(
         self, text: str, *, now: datetime, horizon_days: int = DEFAULT_HORIZON_DAYS

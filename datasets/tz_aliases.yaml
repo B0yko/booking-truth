@@ -8,8 +8,8 @@
 # abbreviation. The longest match wins when more than one entry's text appears. Every zone below is
 # checked against the installed IANA tz database by tests/guards/tz/test_data.py.
 #
-# Sources: design-agent.md SS4/SSD (ambiguous set) and the IANA tz database's own abbreviation
-# tables (dominant US, EU and other regional readings).
+# Sources: the IANA tz database's own abbreviation tables (dominant US, EU and other regional readings);
+# the ambiguous set is the abbreviations and names that stand for two or more non-equivalent regions.
 
 # Ambiguous: abbreviations and names used for two or more non-equivalent regions -------------------
 
@@ -43,8 +43,8 @@
 
 # Resolved: one dominant reading -------------------------------------------------------------------
 
-# US mainland zones (design-agent.md SS4: "EST, ET, EDT, 'Eastern', 'Central time', CT, 'Pacific
-# time', PT and PDT refer to the US zones").
+# US mainland zones: EST, ET, EDT, "Eastern", "Central time", CT, "Pacific time", PT and PDT refer to the
+# US zones.
 - text: EST
   status: resolved
   zone: America/New_York
@@ -141,8 +141,8 @@
   status: resolved
   zone: Europe/Moscow
 
-# Australia (design-agent.md SS4 names only the full phrases as ambiguous; the abbreviations name the
-# larger, DST-observing state).
+# Australia: only the full phrases are ambiguous; the abbreviations name the larger, DST-observing
+# state.
 - text: AEST
   status: resolved
   zone: Australia/Sydney
