@@ -374,8 +374,9 @@ spending anything.
 
 ## Traces and interoperability
 
-Every trial is written as one `agent-trace/v1` record (JSON Lines), the format shared with the sibling projects
-agent-claimcheck and proof-of-done. The schema is published in
+Every trial is written as one `agent-trace/v1` record (JSON Lines), the format also used by
+[agent-claimcheck](https://github.com/B0yko/agent-claimcheck) and
+[proof-of-done](https://github.com/B0yko/proof-of-done). The schema is published in
 [schemas/agent-trace-v1.json](schemas/agent-trace-v1.json). Traces from this project carry ground truth from state
 probes (`checked_by: "state_probe"`) and claim types `booked`, `rescheduled`, `cancelled` and `offered_slots`, with
 every email address replaced by `[lead_email]` or `[email]`. `booking-truth validate-trace <file.jsonl>` validates

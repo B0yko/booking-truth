@@ -20,6 +20,6 @@ All notable changes to this project are documented here. The format follows
   HTTP API.
 - Docker Compose stack for the demo and for a dedicated benchmark pool.
 - Datasets and held-out evals for the time-zone resolver and the belief extractor, plus an `agent-trace/v1`
-  schema shared with sibling projects.
+  schema also used by agent-claimcheck and proof-of-done.
 - Example n8n workflow that proxies a webhook to the guarded agent, with docs and a headless import/publish
   smoke test.

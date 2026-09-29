@@ -1,5 +1,5 @@
 """``crm_outbox`` in the running agent: a validated CRM payload queued for each verified write, never
-from the model's prose. Delivering the queue to HubSpot is a worker of a later milestone; this guard
+from the model's prose. The outbox worker delivers the queue to HubSpot; this guard
 only has to get a correct row into the outbox (or, with it off, leave the naive prose rule as the only
 path to the CRM)."""
 
