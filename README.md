@@ -6,6 +6,8 @@ Cal.com / Google Calendar / HubSpot booking agent that cannot claim a booking it
 [![ci](https://github.com/B0yko/booking-truth/actions/workflows/ci.yml/badge.svg)](https://github.com/B0yko/booking-truth/actions/workflows/ci.yml)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
+Built by [Andrii Boiko](https://boiko.ai/) · [Project overview](https://boiko.ai/work/booking-truth/).
+
 LLM booking agents rarely fail in ways you can see in the conversation. The prospect reads "You're all set for
 Tuesday at 3 PM" while the calendar has nothing, has 3 PM in the wrong time zone, or has two bookings. `booking-truth`
 drives an agent with simulated prospects, injects calendar and delivery faults, and grades every conversation by the
