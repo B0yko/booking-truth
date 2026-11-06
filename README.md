@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/social-preview.png" alt="booking-truth: test the calendar, not the transcript" width="880">
+</p>
+
 # booking-truth
 
 **Test any AI appointment setter on what the calendar says, not on what the transcript says. Ships a guarded
