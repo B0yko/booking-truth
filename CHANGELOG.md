@@ -5,6 +5,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- CI: the ci workflow accepts manual `workflow_dispatch` triggers.
+- Dependencies: certifi bumped to 2026.10.23 and the unused pillow dev dependency removed (pip-audit now
+  reports no known vulnerabilities); eslint bumped to 10.15.0, clearing the minimatch advisory (npm audit clean).
+
 ## [0.1.0] - 2026-09-27
 
 - Benchmark harness: 24 scenarios (happy paths, time-zone traps, calendar/delivery faults, adversarial
